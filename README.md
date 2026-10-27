@@ -217,12 +217,15 @@ flowchart TB
 ## 🎬 Demo: Meta Global AI Developer Hackathon 2026
 
 > [!TIP]
-> The scene: an agent built on **Muse Spark** triages a synthetic insurance claim ([`demo/case_4417.md`](demo/case_4417.md)) and rejects it. Months later the expert receives three pages, checks them offline, and Muse Spark explains the verified pages in plain language for the judge.
+> The scene: an agent built on **Muse Spark** triages a synthetic insurance claim ([`demo/case_4417.md`](demo/case_4417.md)) and rejects it. Every step lands as a signed page: its reading of the claim, the policy lookup, each Muse Spark call (model, request and answer hashes), and the damage mask from **SAM 3.1** (picture hash, box, mask hash). The agent then explains its decision for the judge, every sentence citing a page `[p:N]`; a program — not a model — checks that each citation points at a page that verifies offline.
 
 | Piece | Where |
 |---|---|
 | Agent tools over MCP (`ksg_get_container`, `ksg_write_page`, `ksg_export_page`, `ksg_verify`) | [`scripts/ksg_mcp.py`](scripts/ksg_mcp.py) |
 | The orchestrator hands the claim to the agent through an ACP-A2A gateway | [`scripts/demo_orchestrator.sh`](scripts/demo_orchestrator.sh) |
+| Every Muse Spark call becomes a page (`ksg_model_call`); a SAM 3.1 damage mask becomes a page (`ksg_mask_damage`) | [`scripts/ksg_mcp.py`](scripts/ksg_mcp.py), [`scripts/ksg_model_api.py`](scripts/ksg_model_api.py) |
+| The expert re-asks SAM 3.1 with the same box and compares the mask hash byte for byte | [`scripts/expert_recheck_mask.py`](scripts/expert_recheck_mask.py) |
+| The judge explanation: every `[p:N]` must point at an existing page that verifies offline, or the explanation is refused | [`scripts/judge_explain.py`](scripts/judge_explain.py) |
 | The container number paid with x402 through μ Gate — the agent never holds a wallet key | [`scripts/e2e_ksg_x402.sh`](scripts/e2e_ksg_x402.sh) |
 | Pro with anchors on a local Solana node | [`scripts/demo_pro_localnet.sh`](scripts/demo_pro_localnet.sh) |
 | The same chain on the capsule: print → initiation → three pages → export → ACCEPTED offline; a tampered page REJECTED | [`scripts/demo_pro_capsule.sh`](scripts/demo_pro_capsule.sh) |
@@ -232,7 +235,8 @@ flowchart TB
 - [x] **The capsule** — one fixed-size 6 MiB file indistinguishable from noise; each party holds one secret file; parts are sealed to the parties' maps (X25519 + ML-KEM-768)
 - [x] Agent tools over MCP; the stand's demo chain
 - [x] The container's code running inside the capsule: the module in wasmtime behind the two imports, a session of open → call ×N → close, the `ksg-capsule` command line; the offline chain verifies (K5 offline). The Pro half — anchors read by the reader — is not wired into `ksg-capsule` yet
-- [ ] Muse Spark: every model call recorded as a page; image evidence through SAM 3.1; an explanation whose citations are checked against the verified pages
+- [x] Muse Spark: every model call recorded as a page; image evidence through SAM 3.1 (the mask is byte-identical when re-asked with the same box); the agent's explanation for the judge, its citations checked against the verified pages — the whole scene runs with one command (`scripts/demo_orchestrator.sh`), five pages ACCEPTED
+- [x] The client agent is named by the `did:key` of its own group key — two receivers never share an identifier
 
 <details>
 <summary><b>Prior work (before the hackathon)</b></summary>

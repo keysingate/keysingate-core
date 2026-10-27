@@ -8,8 +8,10 @@
 # the gateway answers at once with a task id, the script polls tasks/get every
 # 5 s until the state is not "working". No connection stays open while the
 # agent works, so the cloud egress proxy cannot cut it (~30 s of silence).
-# The bearer token is added by the cloud proxy (Network secrets for the host),
-# the script never sees it.
+# From the cloud the bearer token is added by the egress proxy. On the owner's
+# machine the gateway is reached directly, so the token comes from the
+# environment (GW_TOKEN or GW_TOKEN_CLOUD): a file-sourced variable, never an
+# argument — the value is not printed and not part of any command line.
 set -euo pipefail
 
 AGENT=${1:?agent_id}
@@ -17,6 +19,9 @@ SRC=${2:?task file or -}
 MAX=${3:-1800}
 BASE=${GW_BASE:-https://gw.keysingate.com}
 URL="$BASE/agents/$AGENT/rpc"
+TOKEN=${GW_TOKEN:-${GW_TOKEN_CLOUD:-}}
+AUTH=()
+[ -n "$TOKEN" ] && AUTH=(-H "Authorization: Bearer $TOKEN")
 
 if [ "$SRC" = "-" ]; then TEXT=$(cat); else TEXT=$(cat "$SRC"); fi
 
@@ -25,7 +30,7 @@ import json, sys
 print(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "message/send",
   "params": {"message": {"role": "user", "parts": [{"kind": "text", "text": sys.argv[1]}]},
              "configuration": {"blocking": False}}}, ensure_ascii=False))' "$TEXT" \
-  | curl -sS --max-time 60 -X POST "$URL" -H 'Content-Type: application/json' --data-binary @-)
+  | curl -sS --max-time 60 "${AUTH[@]}" -X POST "$URL" -H 'Content-Type: application/json' --data-binary @-)
 
 TASK=$(printf '%s' "$START" | python3 -I -c '
 import json, sys
@@ -36,7 +41,7 @@ echo "task $TASK started" >&2
 
 DEADLINE=$(( $(date +%s) + MAX ))
 while :; do
-  GOT=$(curl -sS --max-time 30 -X POST "$URL" -H 'Content-Type: application/json' \
+  GOT=$(curl -sS --max-time 30 "${AUTH[@]}" -X POST "$URL" -H 'Content-Type: application/json' \
     -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tasks/get\",\"params\":{\"id\":\"$TASK\"}}")
   STATE=$(printf '%s' "$GOT" | python3 -I -c '
 import json, sys
@@ -54,4 +59,7 @@ if "error" in d: sys.exit("gateway error: " + json.dumps(d["error"], ensure_asci
 st = d["result"]["status"]
 for p in (st.get("message") or {}).get("parts", []):
     if p.get("kind") == "text": print(p["text"])
-print("[state: " + st["state"] + "]")'
+print("[state: " + st["state"] + "]")
+# A task that did not complete is not an answer: the caller (demo_orchestrator.sh)
+# must see the failure and stop instead of explaining half-written pages.
+sys.exit(0 if st["state"] == "completed" else 3)'
