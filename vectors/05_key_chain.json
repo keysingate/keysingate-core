@@ -1,0 +1,263 @@
+{
+  "set": "05_key_chain",
+  "spec": "core v2 §8.6: a key is laid on top, never replaced; every key of the chain stays valid",
+  "binding": {
+    "@context": "urn:keysingate:core:v3",
+    "type": "AgentBinding",
+    "v": 3,
+    "emission": "ksg:em:000001",
+    "block": {
+      "from": 4700000,
+      "to": 4700999
+    },
+    "agent": {
+      "kid": "did:key:zAgent#k0",
+      "alg": "Ed25519",
+      "key": "6S62BU_pvGgqG887dZ9lqzikz72BxNHzNC5Myc3tiws"
+    },
+    "bound_at": "2026-08-27T10:05:00.000Z",
+    "signatures": [
+      {
+        "kid": "did:key:zAgent#k0",
+        "alg": "Ed25519",
+        "value": "VHd4d8h3Kn03xjoJNq81uovtOnQSG-5eKBR9otaQ_zUc7ov8Qv1N8Y18VrkV-j1O1N1Vt9hCpUL4N7BaqnqrCA"
+      },
+      {
+        "kid": "did:web:holder.example#h1",
+        "alg": "Ed25519",
+        "value": "Ql3WIDVI2QbdB0vq2Xtexfk7gFmfme0TPMANFSkGK1JoptVkk0Ze7WTColztCn45MyUHU5J2Wgq6VyvnPN-oBA"
+      }
+    ]
+  },
+  "inclusions": [
+    {
+      "@context": "urn:keysingate:core:v3",
+      "type": "KeyInclusion",
+      "v": 3,
+      "emission": "ksg:em:000001",
+      "block": {
+        "from": 4700000,
+        "to": 4700999
+      },
+      "predecessor": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+      "key": {
+        "kid": "did:key:zAgent#k1",
+        "alg": "Ed25519",
+        "key": "-kg0FH9uaQw2k-_2EzYEZAPNiuKhTzGzxAc1hWkjlWU"
+      },
+      "offset_ms": 1000,
+      "signatures": [
+        {
+          "kid": "did:key:zAgent#k0",
+          "alg": "Ed25519",
+          "value": "hwZ9G1brQwY--BEQpD0TSHOjXDYoLKRgufNLfGKUHvh8RuLIhpEEYfTlqK1wrEAK0Q2L1O6IRtPM5Xi8wW2wCA"
+        }
+      ]
+    },
+    {
+      "@context": "urn:keysingate:core:v3",
+      "type": "KeyInclusion",
+      "v": 3,
+      "emission": "ksg:em:000001",
+      "block": {
+        "from": 4700000,
+        "to": 4700999
+      },
+      "predecessor": "122085516bdf2608a44c8406548d2fae9466ce7e69f6cb658cc00fee2e5d533c5f01",
+      "key": {
+        "kid": "did:key:zAgent#k2",
+        "alg": "Ed25519",
+        "key": "GX9rI-FshTLGq8g4-s1ep4m-DHaykgM0A5v6iz02jWE"
+      },
+      "offset_ms": 2000,
+      "signatures": [
+        {
+          "kid": "did:key:zAgent#k1",
+          "alg": "Ed25519",
+          "value": "0ovfw-r0k_AcZAwZfR6SMyXPc8AAPs03MVfG9kHCko0M09Yfss8gwqnVGS0Wttfy9wEdaajCK19QnNZVYBWADw"
+        }
+      ]
+    }
+  ],
+  "result": {
+    "verdict": "accept"
+  },
+  "key_set": [
+    "did:key:zAgent#k0",
+    "did:key:zAgent#k1",
+    "did:key:zAgent#k2"
+  ],
+  "cases": [
+    {
+      "name": "a link that does not follow its predecessor",
+      "inclusions": [
+        {
+          "@context": "urn:keysingate:core:v3",
+          "type": "KeyInclusion",
+          "v": 3,
+          "emission": "ksg:em:000001",
+          "block": {
+            "from": 4700000,
+            "to": 4700999
+          },
+          "predecessor": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+          "key": {
+            "kid": "did:key:zAgent#k1",
+            "alg": "Ed25519",
+            "key": "-kg0FH9uaQw2k-_2EzYEZAPNiuKhTzGzxAc1hWkjlWU"
+          },
+          "offset_ms": 1000,
+          "signatures": [
+            {
+              "kid": "did:key:zAgent#k0",
+              "alg": "Ed25519",
+              "value": "hwZ9G1brQwY--BEQpD0TSHOjXDYoLKRgufNLfGKUHvh8RuLIhpEEYfTlqK1wrEAK0Q2L1O6IRtPM5Xi8wW2wCA"
+            }
+          ]
+        },
+        {
+          "@context": "urn:keysingate:core:v3",
+          "type": "KeyInclusion",
+          "v": 3,
+          "emission": "ksg:em:000001",
+          "block": {
+            "from": 4700000,
+            "to": 4700999
+          },
+          "predecessor": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+          "key": {
+            "kid": "did:key:zAgent#k2",
+            "alg": "Ed25519",
+            "key": "GX9rI-FshTLGq8g4-s1ep4m-DHaykgM0A5v6iz02jWE"
+          },
+          "offset_ms": 2000,
+          "signatures": [
+            {
+              "kid": "did:key:zAgent#k1",
+              "alg": "Ed25519",
+              "value": "5n9ioWTq2T9tbA9-8mNgUDOr91f2AK-CPNiYqvL5YLGaO-Y1GlAmikJER1_ucd8GQydiR-RIwaTV-FC3Rg8TAQ"
+            }
+          ]
+        }
+      ],
+      "result": {
+        "verdict": "reject",
+        "reason": "key chain: link 1 does not follow the previous one"
+      }
+    },
+    {
+      "name": "a link signed by a key other than its predecessor's",
+      "inclusions": [
+        {
+          "@context": "urn:keysingate:core:v3",
+          "type": "KeyInclusion",
+          "v": 3,
+          "emission": "ksg:em:000001",
+          "block": {
+            "from": 4700000,
+            "to": 4700999
+          },
+          "predecessor": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+          "key": {
+            "kid": "did:key:zAgent#k1",
+            "alg": "Ed25519",
+            "key": "-kg0FH9uaQw2k-_2EzYEZAPNiuKhTzGzxAc1hWkjlWU"
+          },
+          "offset_ms": 1000,
+          "signatures": [
+            {
+              "kid": "did:key:zAgent#k0",
+              "alg": "Ed25519",
+              "value": "hwZ9G1brQwY--BEQpD0TSHOjXDYoLKRgufNLfGKUHvh8RuLIhpEEYfTlqK1wrEAK0Q2L1O6IRtPM5Xi8wW2wCA"
+            }
+          ]
+        },
+        {
+          "@context": "urn:keysingate:core:v3",
+          "type": "KeyInclusion",
+          "v": 3,
+          "emission": "ksg:em:000001",
+          "block": {
+            "from": 4700000,
+            "to": 4700999
+          },
+          "predecessor": "122085516bdf2608a44c8406548d2fae9466ce7e69f6cb658cc00fee2e5d533c5f01",
+          "key": {
+            "kid": "did:key:zAgent#k2",
+            "alg": "Ed25519",
+            "key": "GX9rI-FshTLGq8g4-s1ep4m-DHaykgM0A5v6iz02jWE"
+          },
+          "offset_ms": 2000,
+          "signatures": [
+            {
+              "kid": "did:key:zAgent#k0",
+              "alg": "Ed25519",
+              "value": "45AcQhb9wB5qECzM7gnuelyQd38TxUdEmsG10v-6S8H3rgONAB999GH4i4hmI2c9mY1izWVSmWePIIceizCEDw"
+            }
+          ]
+        }
+      ],
+      "result": {
+        "verdict": "reject",
+        "reason": "key chain: link 1 is not signed by its predecessor"
+      }
+    },
+    {
+      "name": "a key already in the set",
+      "inclusions": [
+        {
+          "@context": "urn:keysingate:core:v3",
+          "type": "KeyInclusion",
+          "v": 3,
+          "emission": "ksg:em:000001",
+          "block": {
+            "from": 4700000,
+            "to": 4700999
+          },
+          "predecessor": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+          "key": {
+            "kid": "did:key:zAgent#k1",
+            "alg": "Ed25519",
+            "key": "-kg0FH9uaQw2k-_2EzYEZAPNiuKhTzGzxAc1hWkjlWU"
+          },
+          "offset_ms": 1000,
+          "signatures": [
+            {
+              "kid": "did:key:zAgent#k0",
+              "alg": "Ed25519",
+              "value": "hwZ9G1brQwY--BEQpD0TSHOjXDYoLKRgufNLfGKUHvh8RuLIhpEEYfTlqK1wrEAK0Q2L1O6IRtPM5Xi8wW2wCA"
+            }
+          ]
+        },
+        {
+          "@context": "urn:keysingate:core:v3",
+          "type": "KeyInclusion",
+          "v": 3,
+          "emission": "ksg:em:000001",
+          "block": {
+            "from": 4700000,
+            "to": 4700999
+          },
+          "predecessor": "122085516bdf2608a44c8406548d2fae9466ce7e69f6cb658cc00fee2e5d533c5f01",
+          "key": {
+            "kid": "did:key:zAgent#k1",
+            "alg": "Ed25519",
+            "key": "-kg0FH9uaQw2k-_2EzYEZAPNiuKhTzGzxAc1hWkjlWU"
+          },
+          "offset_ms": 2000,
+          "signatures": [
+            {
+              "kid": "did:key:zAgent#k1",
+              "alg": "Ed25519",
+              "value": "a-6hRSS_aeDb0gnXukFE4-C_sNPWxzlqqoLNDfbNHtCdN9wZqrX8_lV3js1LkGasM7KmsmbCWKX_IzyIU1t_DA"
+            }
+          ]
+        }
+      ],
+      "result": {
+        "verdict": "reject",
+        "reason": "key chain: the key of link 1 is already in the set"
+      }
+    }
+  ]
+}

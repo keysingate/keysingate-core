@@ -1,0 +1,484 @@
+{
+  "set": "04_channel",
+  "spec": "core v2 §8: release → delegations → packet → binding → initiation → container ID",
+  "documents": {
+    "emission": {
+      "@context": "urn:keysingate:core:v3",
+      "type": "Emission",
+      "v": 3,
+      "id": "ksg:em:000001",
+      "range": {
+        "from": 1,
+        "to": 100000000
+      },
+      "block_ttl_days": 90,
+      "issuer": "did:web:issuer.example",
+      "issued_at": "2026-08-27T00:00:00.000Z",
+      "keys": [
+        {
+          "kid": "did:web:issuer.example#root",
+          "alg": "Ed25519",
+          "key": "DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A"
+        }
+      ],
+      "signatures": [
+        {
+          "kid": "did:web:issuer.example#root",
+          "alg": "Ed25519",
+          "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+        }
+      ]
+    },
+    "delegations": [
+      {
+        "@context": "urn:keysingate:core:v3",
+        "type": "Delegation",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "range": {
+          "from": 1,
+          "to": 100000000
+        },
+        "delegate": "did:web:issuer.example",
+        "keys": [
+          {
+            "kid": "did:web:issuer.example#ops1",
+            "alg": "Ed25519",
+            "key": "a3NKjv8kb-c0s41ARsFI7uXwT-h7OgpCOVWneVbeBms"
+          }
+        ],
+        "depth": 0,
+        "delegated_at": "2026-08-27T01:00:00.000Z",
+        "term_ms": 7776000000,
+        "expires_at": "2027-08-27T00:00:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "aNNiDjZEy3gYRxlecbJHC71BrEuSPhPrtQaUfRg9tW3llAWFGI7ykEu01TwL_pi1gE0Dgb5yaEHpvBUNnWSHAw"
+          }
+        ]
+      },
+      {
+        "@context": "urn:keysingate:core:v3",
+        "type": "Delegation",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "range": {
+          "from": 4000000,
+          "to": 4999999
+        },
+        "delegate": "did:web:dist.example",
+        "keys": [
+          {
+            "kid": "did:web:dist.example#d1",
+            "alg": "Ed25519",
+            "key": "7WpHo52oabVEYVXkCy2T8ePwFnviZzK656PvnY46P9M"
+          }
+        ],
+        "parent": "12205f786b283681f0e240f97af2096ffb3ae22e5db53479e8fc9bb5576bbb43a553",
+        "depth": 1,
+        "delegated_at": "2026-08-27T01:00:00.000Z",
+        "term_ms": 7776000000,
+        "expires_at": "2027-01-01T00:00:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#ops1",
+            "alg": "Ed25519",
+            "value": "kWH6WmcO4vL4dfuQOKlYANiuKCoJXArljRzGJp-Vpz1--lpAvfh5gpQ1xLW5LqdzWGApbWjoQwhzZDkLmX1xDQ"
+          }
+        ]
+      }
+    ],
+    "allocation": {
+      "@context": "urn:keysingate:core:v3",
+      "type": "BlockAllocation",
+      "v": 3,
+      "emission": "ksg:em:000001",
+      "block": {
+        "from": 4700000,
+        "to": 4700999
+      },
+      "class": "heavy",
+      "holder": "did:web:holder.example",
+      "allocated_at": "2026-08-27T10:00:00.000Z",
+      "expires_at": "2026-11-25T10:00:00.000Z",
+      "signatures": [
+        {
+          "kid": "did:web:dist.example#d1",
+          "alg": "Ed25519",
+          "value": "q4JVWcfC3FUuopeldkj1_R_LtIo0KUk3F4EC-GCaRGO7WnKIQ_CmvIDcdgw1x1xofGo6o6kDPMTejUMGPVJyDw"
+        }
+      ]
+    },
+    "binding": {
+      "@context": "urn:keysingate:core:v3",
+      "type": "AgentBinding",
+      "v": 3,
+      "emission": "ksg:em:000001",
+      "block": {
+        "from": 4700000,
+        "to": 4700999
+      },
+      "agent": {
+        "kid": "did:key:zAgent#k0",
+        "alg": "Ed25519",
+        "key": "6S62BU_pvGgqG887dZ9lqzikz72BxNHzNC5Myc3tiws"
+      },
+      "bound_at": "2026-08-27T10:05:00.000Z",
+      "signatures": [
+        {
+          "kid": "did:key:zAgent#k0",
+          "alg": "Ed25519",
+          "value": "VHd4d8h3Kn03xjoJNq81uovtOnQSG-5eKBR9otaQ_zUc7ov8Qv1N8Y18VrkV-j1O1N1Vt9hCpUL4N7BaqnqrCA"
+        },
+        {
+          "kid": "did:web:holder.example#h1",
+          "alg": "Ed25519",
+          "value": "Ql3WIDVI2QbdB0vq2Xtexfk7gFmfme0TPMANFSkGK1JoptVkk0Ze7WTColztCn45MyUHU5J2Wgq6VyvnPN-oBA"
+        }
+      ]
+    },
+    "container_init": {
+      "@context": "urn:keysingate:core:v3",
+      "type": "ContainerInit",
+      "v": 3,
+      "emission": "ksg:em:000001",
+      "serial": 4700007,
+      "binding": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+      "agent": {
+        "kid": "did:key:zClient#c1",
+        "alg": "Ed25519",
+        "key": "VSb3QpQXEbO8UwukT_b22rDwq3Gvgy9Bp_47n9rtnGA"
+      },
+      "artifact": "did:web:artifact.example",
+      "offset_ms": 12345,
+      "container": "1220ee9c815ae594fa197581c002ba5c1fcbe2a210e3123dd3652aa2bd9071c6878f",
+      "signatures": [
+        {
+          "kid": "did:key:zClient#c1",
+          "alg": "Ed25519",
+          "value": "fJUuSQgG5lE0cFTdnrRlyTYlZ26deotaS4U7yHsKdJytqCc37x08G_r73JokxnZMoUNr3iuWjcsqWgtMXhC1Aw"
+        },
+        {
+          "kid": "did:key:zOwner#o1",
+          "alg": "Ed25519",
+          "value": "xHJ3APXJb6zmOUmAxLPudTgOeFZyguhj_n1OiWmaeLeNmdFOVK5mFEMILX_MRonBG14vOwNZ6VhK-jeKh75_Ag"
+        }
+      ]
+    }
+  },
+  "presented_keys": {
+    "holder": [
+      {
+        "kid": "did:web:holder.example#h1",
+        "alg": "Ed25519",
+        "key": "XkSa1vpLLWV0bozU-WjjjFqWefhJXbEU7gYxf3L3F9s"
+      }
+    ],
+    "initiation": [
+      {
+        "kid": "did:key:zClient#c1",
+        "alg": "Ed25519",
+        "key": "VSb3QpQXEbO8UwukT_b22rDwq3Gvgy9Bp_47n9rtnGA"
+      },
+      {
+        "kid": "did:key:zOwner#o1",
+        "alg": "Ed25519",
+        "key": "cN-eInmtvsbRK_KSEYTJIi6yTthSAFv2QBOfUuWc2a4"
+      }
+    ],
+    "chain_depth": 1
+  },
+  "derived": {
+    "emission_hash": "1220602e1cda27547eee1ff3759e1ed69f3334d8243f0110cf3818949e8ea4ba2662",
+    "binding_hash": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+    "granted_range": {
+      "from": 4000000,
+      "to": 4999999
+    },
+    "packet_keys": [
+      {
+        "kid": "did:web:dist.example#d1",
+        "alg": "Ed25519",
+        "key": "7WpHo52oabVEYVXkCy2T8ePwFnviZzK656PvnY46P9M"
+      }
+    ],
+    "container_id": "1220ee9c815ae594fa197581c002ba5c1fcbe2a210e3123dd3652aa2bd9071c6878f",
+    "container_id_inputs": "SHA-256 of length-prefixed fields: domain, emission id, emission issued_at, serial (u64 big-endian), agent key (base64url text), artifact URI, offset_ms (u64 big-endian)",
+    "lifetime_ms_at_depth_1": 8553600000
+  },
+  "cases": [
+    {
+      "name": "emission",
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "delegation chain",
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "allocation signed by the distributor's granted key",
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "binding signed by the agent and the holder",
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "binding signed by the agent alone",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "AgentBinding",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "block": {
+          "from": 4700000,
+          "to": 4700999
+        },
+        "agent": {
+          "kid": "did:key:zAgent#k0",
+          "alg": "Ed25519",
+          "key": "6S62BU_pvGgqG887dZ9lqzikz72BxNHzNC5Myc3tiws"
+        },
+        "bound_at": "2026-08-27T10:05:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:key:zAgent#k0",
+            "alg": "Ed25519",
+            "value": "VHd4d8h3Kn03xjoJNq81uovtOnQSG-5eKBR9otaQ_zUc7ov8Qv1N8Y18VrkV-j1O1N1Vt9hCpUL4N7BaqnqrCA"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "schema: AgentBinding is not authorized by the holder of the packet"
+      }
+    },
+    {
+      "name": "initiation with the derived identifier",
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "initiation asserting its own identifier",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "ContainerInit",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "serial": 4700007,
+        "binding": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+        "agent": {
+          "kid": "did:key:zClient#c1",
+          "alg": "Ed25519",
+          "key": "VSb3QpQXEbO8UwukT_b22rDwq3Gvgy9Bp_47n9rtnGA"
+        },
+        "artifact": "did:web:artifact.example",
+        "offset_ms": 12345,
+        "container": "1220ca6fa24e5ff3bf00165a8523dcb676fc40af5a085ef928bdc1805fe9eba9cb4c",
+        "signatures": [
+          {
+            "kid": "did:key:zClient#c1",
+            "alg": "Ed25519",
+            "value": "yV7072rBx3nGUNuUNK3xkkSgj57FE-x4F0gxh7x1amrmhJN-ua6_P_fFgN3rKNuj19HkaK7eyAdbQS9NHzLPCw"
+          },
+          {
+            "kid": "did:key:zOwner#o1",
+            "alg": "Ed25519",
+            "value": "YGNbnbJttWE_TaLDZOwcl3w2a6pm8vZx3L6csqkWFcghZbupfKqfinwwWKT_AovXGy51_BjnME8izyYocckICQ"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "schema: ContainerInit.container is not the derived identifier"
+      }
+    },
+    {
+      "name": "initiation after the packet's lifetime",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "ContainerInit",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "serial": 4700007,
+        "binding": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+        "agent": {
+          "kid": "did:key:zClient#c1",
+          "alg": "Ed25519",
+          "key": "VSb3QpQXEbO8UwukT_b22rDwq3Gvgy9Bp_47n9rtnGA"
+        },
+        "artifact": "did:web:artifact.example",
+        "offset_ms": 8553600001,
+        "container": "122001b3315c5f890c392abc4bb9ffd5e16fc1ca95c4e04974707ee2435b3f615ec0",
+        "signatures": [
+          {
+            "kid": "did:key:zClient#c1",
+            "alg": "Ed25519",
+            "value": "-y3WStzoLN8shVwFc84DQmjIKKGW-nRjuufVLVpHOqoUN5wQcqAu3pEaFl0lJwXGYB7ovUQl_TY1pYagp_VGCw"
+          },
+          {
+            "kid": "did:key:zOwner#o1",
+            "alg": "Ed25519",
+            "value": "6k7YfK4kT0SR8nCurAkdCDp4SCRVy9s16_i8rEfbbIe01FJH3jtNI70ZcbWXijgkVouR3IjjehJVUD6YSl46Bw"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "activation after the packet's lifetime"
+      }
+    },
+    {
+      "name": "initiation of a serial outside the block",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "ContainerInit",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "serial": 4701000,
+        "binding": "12201e6393d3bff9cb715635a5368623ffb8c9b66188c87e772f952b58819918c44c",
+        "agent": {
+          "kid": "did:key:zClient#c1",
+          "alg": "Ed25519",
+          "key": "VSb3QpQXEbO8UwukT_b22rDwq3Gvgy9Bp_47n9rtnGA"
+        },
+        "artifact": "did:web:artifact.example",
+        "offset_ms": 12345,
+        "container": "1220e1750d76f1398d9054d8b2ae4ce0926cf3b9cb38e9b19cd1aa23ba42d2343465",
+        "signatures": [
+          {
+            "kid": "did:key:zClient#c1",
+            "alg": "Ed25519",
+            "value": "2FC9dEp89zH5nPVeOPzwITwaJsDT02LcE2dILEO9vk0ABV58LhPaocYTgNIY-8mm_o-Bcqm_inttS98SL3ocCQ"
+          },
+          {
+            "kid": "did:key:zOwner#o1",
+            "alg": "Ed25519",
+            "value": "p_-a5TjDF7Sm1WURT3-KYQJKZ_b54CclSeLovoFHpIrvQ1m19E9qEt0KmKcLS9yCdyaY79QYQjncn5ePszGZDg"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "serial 4701000 is out of range"
+      }
+    },
+    {
+      "name": "a binding of version 2 belongs to core v1",
+      "input": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "AgentBinding",
+        "v": 2,
+        "emission": "ksg:em:000001",
+        "block": {
+          "from": 4700000,
+          "to": 4700999
+        },
+        "agent": {
+          "kid": "did:key:zAgent#k0",
+          "alg": "Ed25519",
+          "key": "6S62BU_pvGgqG887dZ9lqzikz72BxNHzNC5Myc3tiws"
+        },
+        "bound_at": "2026-08-27T10:05:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:key:zAgent#k0",
+            "alg": "Ed25519",
+            "value": "VHd4d8h3Kn03xjoJNq81uovtOnQSG-5eKBR9otaQ_zUc7ov8Qv1N8Y18VrkV-j1O1N1Vt9hCpUL4N7BaqnqrCA"
+          },
+          {
+            "kid": "did:web:holder.example#h1",
+            "alg": "Ed25519",
+            "value": "Ql3WIDVI2QbdB0vq2Xtexfk7gFmfme0TPMANFSkGK1JoptVkk0Ze7WTColztCn45MyUHU5J2Wgq6VyvnPN-oBA"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "schema: document version is below the issued ones"
+      }
+    },
+    {
+      "name": "a binding in the context of core v1",
+      "input": {
+        "@context": "urn:keysingate:core:v1",
+        "type": "AgentBinding",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "block": {
+          "from": 4700000,
+          "to": 4700999
+        },
+        "agent": {
+          "kid": "did:key:zAgent#k0",
+          "alg": "Ed25519",
+          "key": "6S62BU_pvGgqG887dZ9lqzikz72BxNHzNC5Myc3tiws"
+        },
+        "bound_at": "2026-08-27T10:05:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:key:zAgent#k0",
+            "alg": "Ed25519",
+            "value": "VHd4d8h3Kn03xjoJNq81uovtOnQSG-5eKBR9otaQ_zUc7ov8Qv1N8Y18VrkV-j1O1N1Vt9hCpUL4N7BaqnqrCA"
+          },
+          {
+            "kid": "did:web:holder.example#h1",
+            "alg": "Ed25519",
+            "value": "Ql3WIDVI2QbdB0vq2Xtexfk7gFmfme0TPMANFSkGK1JoptVkk0Ze7WTColztCn45MyUHU5J2Wgq6VyvnPN-oBA"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "@context is not urn:keysingate:core:v3"
+      }
+    },
+    {
+      "name": "a binding with an unknown field",
+      "input": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "AgentBinding",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "block": {
+          "from": 4700000,
+          "to": 4700999
+        },
+        "agent": {
+          "kid": "did:key:zAgent#k0",
+          "alg": "Ed25519",
+          "key": "6S62BU_pvGgqG887dZ9lqzikz72BxNHzNC5Myc3tiws"
+        },
+        "bound_at": "2026-08-27T10:05:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:key:zAgent#k0",
+            "alg": "Ed25519",
+            "value": "VHd4d8h3Kn03xjoJNq81uovtOnQSG-5eKBR9otaQ_zUc7ov8Qv1N8Y18VrkV-j1O1N1Vt9hCpUL4N7BaqnqrCA"
+          },
+          {
+            "kid": "did:web:holder.example#h1",
+            "alg": "Ed25519",
+            "value": "Ql3WIDVI2QbdB0vq2Xtexfk7gFmfme0TPMANFSkGK1JoptVkk0Ze7WTColztCn45MyUHU5J2Wgq6VyvnPN-oBA"
+          }
+        ],
+        "extra": 1
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "unknown field `extra`, expected one of `@context`, `type`, `v`, `emission`, `block`, `agent`, `bound_at`, `signatures`"
+      }
+    }
+  ]
+}

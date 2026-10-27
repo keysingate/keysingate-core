@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/class-promotion.json",
+  "title": "ClassPromotion - a raise of one container's class (core v2 section 8.7)",
+  "description": "Upward only: bare < light < heavy. Signed by two different parties, the issuer and the holder. A container that could quietly claim a higher class would be claiming anchors it never had, so the raise is a signed act and not a field the holder edits. The schema checks the shape; that `to` is above `from` and that `from` is the class the container holds now is checked by the verifier.",
+  "type": "object",
+  "properties": {
+    "@context": {
+      "$ref": "common.json#/$defs/context"
+    },
+    "type": {
+      "const": "ClassPromotion"
+    },
+    "v": {
+      "$ref": "common.json#/$defs/version"
+    },
+    "container": {
+      "description": "The container being raised: its identifier, not its serial.",
+      "$ref": "common.json#/$defs/multihash"
+    },
+    "from": {
+      "$ref": "#/$defs/class"
+    },
+    "to": {
+      "$ref": "#/$defs/class"
+    },
+    "offset_ms": {
+      "description": "Milliseconds since the packet's origin (KS-2).",
+      "$ref": "common.json#/$defs/safe_uint"
+    },
+    "signatures": {
+      "description": "At least two: the issuer's and the holder's.",
+      "$ref": "common.json#/$defs/signatures",
+      "minItems": 2
+    }
+  },
+  "required": [
+    "@context",
+    "type",
+    "v",
+    "container",
+    "from",
+    "to",
+    "offset_ms",
+    "signatures"
+  ],
+  "additionalProperties": false,
+  "not": {
+    "properties": {
+      "from": {
+        "const": "heavy"
+      }
+    },
+    "required": [
+      "from"
+    ]
+  },
+  "$defs": {
+    "class": {
+      "enum": [
+        "bare",
+        "light",
+        "heavy"
+      ]
+    }
+  }
+}

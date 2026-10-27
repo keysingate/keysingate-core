@@ -1,0 +1,23 @@
+[package]
+name = "ksg-vectors-v2"
+description = "Test vectors of core v2 (documents of major version 3). Deterministic: a re-run yields byte-identical files."
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+publish = false
+
+[[bin]]
+name = "ksg-vectors-v2"
+path = "src/main.rs"
+
+[dependencies]
+ksg-core-v2 = { path = "../ksg-core-v2" }
+serde.workspace      = true
+serde_json.workspace = true
+fips204.workspace    = true
+hex.workspace        = true
+
+[lints.rust]
+unsafe_code = "forbid"

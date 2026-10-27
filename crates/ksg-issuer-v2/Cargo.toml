@@ -1,0 +1,23 @@
+[package]
+name = "ksg-issuer-v2"
+description = "The issuer: emission, sequential block allocation, closure intake"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license-file           = "../../LICENSE-PROPRIETARY"
+publish                = false
+repository.workspace   = true
+
+[lib]
+name = "ksg_issuer_v2"
+
+[dependencies]
+ksg-core-v2 = { path = "../ksg-core-v2" }
+serde.workspace      = true
+serde_json.workspace = true
+
+[lints.rust]
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

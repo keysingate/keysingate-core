@@ -1,0 +1,46 @@
+[package]
+name = "ksg-container-v2"
+description = "The container's three entry points and the rules on them, on core v2 (documents of major version 3)"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license-file           = "../../LICENSE-PROPRIETARY"
+publish                = false
+repository.workspace   = true
+
+[lib]
+name = "ksg_container_v2"
+
+[dependencies]
+ksg-core-v2 = { path = "../ksg-core-v2" }
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# The sealed zones go into the state as base64, not as arrays of numbers.
+base64.workspace = true
+sha2.workspace = true
+chacha20poly1305.workspace = true
+x25519-dalek.workspace = true
+hkdf.workspace = true
+fips203.workspace = true
+zeroize.workspace = true
+frost-ed25519.workspace = true
+# The mobile half signs alone only its declaration of loss (owner's decisions
+# 15.10, E-19): an Ed25519 signature under its own public share.
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
+fips204.workspace = true
+# DEFLATE before padding (`pack.rs`): pure Rust, no unsafe code.
+miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }
+
+[dev-dependencies]
+ed25519-dalek.workspace = true
+# The coupling of a `bare` and its Pro leader is confirmed by the verifier on
+# the pair of exports (owner's decision 13.10): the tests drive both sides.
+ksg-verify-v2 = { path = "../ksg-verify-v2", default-features = false }
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

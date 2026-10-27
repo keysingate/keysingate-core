@@ -1,0 +1,83 @@
+{
+  "set": "01_jcs",
+  "spec": "core v2 §3: RFC 8785; integers only, 0 … 2^53 − 1",
+  "cases": [
+    {
+      "input": {
+        "b": 2,
+        "a": 1
+      },
+      "canonical": "{\"a\":1,\"b\":2}",
+      "sha256": "122043258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777",
+      "verdict": "accept"
+    },
+    {
+      "input": {
+        "z": {
+          "y": [
+            3,
+            2,
+            1
+          ],
+          "x": "é"
+        },
+        "a": "€"
+      },
+      "canonical": "{\"a\":\"€\",\"z\":{\"x\":\"é\",\"y\":[3,2,1]}}",
+      "sha256": "1220cdc3d28ad830ee05c150f092d88525e034a014a4ba4750939df8015118d583a9",
+      "verdict": "accept"
+    },
+    {
+      "input": {
+        "max": 9007199254740991,
+        "zero": 0
+      },
+      "canonical": "{\"max\":9007199254740991,\"zero\":0}",
+      "sha256": "1220d1c6de4fff64001e181a639bafdc8cf052b2b3c99db136a90f8653ac648f1b48",
+      "verdict": "accept"
+    },
+    {
+      "input": {
+        "s": "line\nbreak\t\"q\"",
+        "u": "😀"
+      },
+      "canonical": "{\"s\":\"line\\nbreak\\t\\\"q\\\"\",\"u\":\"😀\"}",
+      "sha256": "1220a9a31a66b65df888ee02bda30729a6f883cdc70044239b7fd32ab7065759e5ea",
+      "verdict": "accept"
+    },
+    {
+      "verdict": "reject",
+      "reason": "a number outside 0…2^53-1 in a signed document",
+      "name": "negative",
+      "input": {
+        "n": -1
+      }
+    },
+    {
+      "verdict": "reject",
+      "reason": "a number outside 0…2^53-1 in a signed document",
+      "name": "fraction",
+      "input": {
+        "n": 1.5
+      }
+    },
+    {
+      "verdict": "reject",
+      "reason": "a number outside 0…2^53-1 in a signed document",
+      "name": "above 2^53-1",
+      "input": {
+        "n": 9007199254740992
+      }
+    },
+    {
+      "verdict": "reject",
+      "reason": "the canonical form did not match",
+      "name": "not an object",
+      "input": [
+        1,
+        2,
+        3
+      ]
+    }
+  ]
+}

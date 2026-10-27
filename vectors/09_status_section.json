@@ -1,0 +1,625 @@
+{
+  "set": "09_status_section",
+  "spec": "core v2 §11: a status change is a record and its anchor; record 0 links to the section root; the anchor is read under §7.2",
+  "reader": {
+    "kind": "urn:ksg:anchor:vector",
+    "rule": "an attestation of this kind is read; its proof is the UTF-8 of the moment the network proves, and that moment is returned; a proof equal to the bytes of \"forged\" is refused; every other kind is not read"
+  },
+  "emission": "ksg:em:000001",
+  "serial": 4700007,
+  "section_root": "1220f2fb5bd36f1ce6bd57792e4ff16b070555f8c2a35f64f761a656e185d92a8db9",
+  "section_root_inputs": "SHA-256 of length-prefixed fields: \"ksg:status-section:v1\", emission id, serial (u64 big-endian)",
+  "records": [
+    {
+      "record": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "StatusRecord",
+        "v": 3,
+        "number": 0,
+        "status": 0,
+        "offset_ms": 0,
+        "prev": "1220f2fb5bd36f1ce6bd57792e4ff16b070555f8c2a35f64f761a656e185d92a8db9",
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "IgM7RM9bjWbd9berMrtNUwljROTd2cacbyfeATJhUnMARTs3QSNdR8voe2zc5irNSvaTpml0tnvN7fi3-dnlAg"
+          }
+        ]
+      },
+      "hash": "12208373b03ffbf81b24a6801afce28f9a66a7e152a5e953df43d5c69b57ea50fb18",
+      "anchor": {
+        "type": "urn:ksg:anchor:vector",
+        "subject": "12208373b03ffbf81b24a6801afce28f9a66a7e152a5e953df43d5c69b57ea50fb18",
+        "proof": [
+          50,
+          48,
+          50,
+          54,
+          45,
+          48,
+          56,
+          45,
+          50,
+          55,
+          84,
+          48,
+          48,
+          58,
+          48,
+          48,
+          58,
+          48,
+          49,
+          46,
+          48,
+          48,
+          48,
+          90
+        ],
+        "anchored_at": "2026-08-27T00:00:01.000Z"
+      }
+    },
+    {
+      "record": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "StatusRecord",
+        "v": 3,
+        "number": 1,
+        "status": 1,
+        "event": "apply_packet",
+        "offset_ms": 1000,
+        "prev": "12208373b03ffbf81b24a6801afce28f9a66a7e152a5e953df43d5c69b57ea50fb18",
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "E4U6SzgbdyzM5OtdOsbvezMO5AZ05vQcxi3vzYEw4Dxr3BiizzZr0R07dgYzjnaW-yUcI29-NqbBgs_j9jQMDQ"
+          }
+        ]
+      },
+      "hash": "12200540cda56b4289b3e9ba64c4c479d1881a1e794bbf822478ddadfbc712fd0e7f",
+      "anchor": {
+        "type": "urn:ksg:anchor:vector",
+        "subject": "12200540cda56b4289b3e9ba64c4c479d1881a1e794bbf822478ddadfbc712fd0e7f",
+        "proof": [
+          50,
+          48,
+          50,
+          54,
+          45,
+          48,
+          56,
+          45,
+          50,
+          55,
+          84,
+          49,
+          48,
+          58,
+          48,
+          48,
+          58,
+          48,
+          49,
+          46,
+          48,
+          48,
+          48,
+          90
+        ],
+        "anchored_at": "2026-08-27T10:00:01.000Z"
+      }
+    },
+    {
+      "record": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "StatusRecord",
+        "v": 3,
+        "number": 2,
+        "status": 2,
+        "event": "apply_buyer_key",
+        "offset_ms": 2000,
+        "prev": "12200540cda56b4289b3e9ba64c4c479d1881a1e794bbf822478ddadfbc712fd0e7f",
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "qSOw2yIAw2s-Ih7ofbV5bp7E_txzIMpUDQ2r5kmW1EYZCV_2blONvE9wwnAD5tTh7wa1y_Iec4gsdkYbLkO4AQ"
+          }
+        ]
+      },
+      "hash": "1220e3c61ef16515632d9cba80aab57f5b9e5c02f7b4de84e7a6859a7761b8ee52dd",
+      "anchor": {
+        "type": "urn:ksg:anchor:vector",
+        "subject": "1220e3c61ef16515632d9cba80aab57f5b9e5c02f7b4de84e7a6859a7761b8ee52dd",
+        "proof": [
+          50,
+          48,
+          50,
+          54,
+          45,
+          48,
+          56,
+          45,
+          50,
+          55,
+          84,
+          49,
+          48,
+          58,
+          48,
+          53,
+          58,
+          48,
+          49,
+          46,
+          48,
+          48,
+          48,
+          90
+        ],
+        "anchored_at": "2026-08-27T10:05:01.000Z"
+      }
+    },
+    {
+      "record": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "StatusRecord",
+        "v": 3,
+        "number": 3,
+        "status": 4,
+        "event": "initiate",
+        "offset_ms": 3000,
+        "prev": "1220e3c61ef16515632d9cba80aab57f5b9e5c02f7b4de84e7a6859a7761b8ee52dd",
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "bmZ9T06mgtR4tPGzXzOdWRMrxpDGNT6vQN5vzkv1aQanyQwtHzMvhz6wY34acuHD2r3Bw0F9SHRSTkf4oQFiAQ"
+          }
+        ]
+      },
+      "hash": "12208ab7fc1eaa5f80536f7ffa6200d059263e18ff78795e233d390559a52a25d0e9",
+      "anchor": {
+        "type": "urn:ksg:anchor:vector",
+        "subject": "12208ab7fc1eaa5f80536f7ffa6200d059263e18ff78795e233d390559a52a25d0e9",
+        "proof": [
+          50,
+          48,
+          50,
+          54,
+          45,
+          48,
+          56,
+          45,
+          50,
+          55,
+          84,
+          49,
+          49,
+          58,
+          48,
+          48,
+          58,
+          48,
+          49,
+          46,
+          48,
+          48,
+          48,
+          90
+        ],
+        "anchored_at": "2026-08-27T11:00:01.000Z"
+      }
+    },
+    {
+      "record": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "StatusRecord",
+        "v": 3,
+        "number": 4,
+        "status": 5,
+        "event": "open_journal",
+        "offset_ms": 4000,
+        "prev": "12208ab7fc1eaa5f80536f7ffa6200d059263e18ff78795e233d390559a52a25d0e9",
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "Li-KGwQxDcFp4rwWljw5CXgMffQ7kaff9zGeqYan2WKlstgEWec3ZEDoI3cSWbcasFh6wrplYAsPAWbkiXiPCg"
+          }
+        ]
+      },
+      "hash": "12209f28c8bbcaa15acb7b660b92b3cb492b9901b864543caa9be255ef30c4882d12",
+      "anchor": {
+        "type": "urn:ksg:anchor:vector",
+        "subject": "12209f28c8bbcaa15acb7b660b92b3cb492b9901b864543caa9be255ef30c4882d12",
+        "proof": [
+          50,
+          48,
+          50,
+          54,
+          45,
+          48,
+          56,
+          45,
+          50,
+          55,
+          84,
+          49,
+          49,
+          58,
+          51,
+          48,
+          58,
+          48,
+          49,
+          46,
+          48,
+          48,
+          48,
+          90
+        ],
+        "anchored_at": "2026-08-27T11:30:01.000Z"
+      }
+    }
+  ],
+  "current": 5,
+  "times": [
+    "2026-08-27T00:00:01.000Z",
+    "2026-08-27T10:00:01.000Z",
+    "2026-08-27T10:05:01.000Z",
+    "2026-08-27T11:00:01.000Z",
+    "2026-08-27T11:30:01.000Z"
+  ],
+  "cases": [
+    {
+      "name": "the next change, linked and anchored",
+      "case": {
+        "event": "serve_dispute",
+        "record": {
+          "@context": "urn:keysingate:core:v3",
+          "type": "StatusRecord",
+          "v": 3,
+          "number": 5,
+          "status": 30,
+          "event": "serve_dispute",
+          "offset_ms": 9000,
+          "prev": "12209f28c8bbcaa15acb7b660b92b3cb492b9901b864543caa9be255ef30c4882d12",
+          "signatures": [
+            {
+              "kid": "did:web:issuer.example#root",
+              "alg": "Ed25519",
+              "value": "pKoL21HPDaIrFAJbpT28eFkxKU-macQwZcQ2JGiKtJ4T_3WLio_o2QJBkNJSdRtF1iOemtAFIEfOw91ENHtQCg"
+            }
+          ]
+        },
+        "anchor": {
+          "type": "urn:ksg:anchor:vector",
+          "subject": "12207b76b0e28a5a97733dc27e892590be3b0520a72028cc03223e02d16337367d88",
+          "proof": [
+            50,
+            48,
+            50,
+            54,
+            45,
+            48,
+            57,
+            45,
+            48,
+            49,
+            84,
+            48,
+            48,
+            58,
+            48,
+            48,
+            58,
+            48,
+            48,
+            46,
+            48,
+            48,
+            48,
+            90
+          ],
+          "anchored_at": "2026-09-01T00:00:00.000Z"
+        },
+        "result": {
+          "verdict": "accept"
+        }
+      }
+    },
+    {
+      "name": "a record that does not link to the head",
+      "case": {
+        "event": "serve_dispute",
+        "record": {
+          "@context": "urn:keysingate:core:v3",
+          "type": "StatusRecord",
+          "v": 3,
+          "number": 5,
+          "status": 30,
+          "event": "serve_dispute",
+          "offset_ms": 9000,
+          "prev": "1220f2fb5bd36f1ce6bd57792e4ff16b070555f8c2a35f64f761a656e185d92a8db9",
+          "signatures": [
+            {
+              "kid": "did:web:issuer.example#root",
+              "alg": "Ed25519",
+              "value": "b17ThSAxm2_2mZdXKtBybXuEs7suwP2c8nK829FrEPpTmY_-Irf9ptj0pC3plhItvQhIySfdL08ioDLRZEKTBQ"
+            }
+          ]
+        },
+        "anchor": {
+          "type": "urn:ksg:anchor:vector",
+          "subject": "12207b76b0e28a5a97733dc27e892590be3b0520a72028cc03223e02d16337367d88",
+          "proof": [
+            50,
+            48,
+            50,
+            54,
+            45,
+            48,
+            57,
+            45,
+            48,
+            49,
+            84,
+            48,
+            48,
+            58,
+            48,
+            48,
+            58,
+            48,
+            48,
+            46,
+            48,
+            48,
+            48,
+            90
+          ],
+          "anchored_at": "2026-09-01T00:00:00.000Z"
+        },
+        "result": {
+          "verdict": "reject",
+          "reason": "schema: the status record does not link to the one before it"
+        }
+      }
+    },
+    {
+      "name": "a record out of order",
+      "case": {
+        "event": "serve_dispute",
+        "record": {
+          "@context": "urn:keysingate:core:v3",
+          "type": "StatusRecord",
+          "v": 3,
+          "number": 7,
+          "status": 30,
+          "event": "serve_dispute",
+          "offset_ms": 9000,
+          "prev": "12209f28c8bbcaa15acb7b660b92b3cb492b9901b864543caa9be255ef30c4882d12",
+          "signatures": [
+            {
+              "kid": "did:web:issuer.example#root",
+              "alg": "Ed25519",
+              "value": "9K02ATO_VYiS9_DHzgqG9yF5iiMdmvLoTP6N5T1_ha7MXGffhZHzHjUsl80amuGa_MSMoLWsNSCHvbqBlkNnCA"
+            }
+          ]
+        },
+        "anchor": {
+          "type": "urn:ksg:anchor:vector",
+          "subject": "12207b76b0e28a5a97733dc27e892590be3b0520a72028cc03223e02d16337367d88",
+          "proof": [
+            50,
+            48,
+            50,
+            54,
+            45,
+            48,
+            57,
+            45,
+            48,
+            49,
+            84,
+            48,
+            48,
+            58,
+            48,
+            48,
+            58,
+            48,
+            48,
+            46,
+            48,
+            48,
+            48,
+            90
+          ],
+          "anchored_at": "2026-09-01T00:00:00.000Z"
+        },
+        "result": {
+          "verdict": "reject",
+          "reason": "schema: the status record is out of order"
+        }
+      }
+    },
+    {
+      "name": "a record carrying another status than the move",
+      "case": {
+        "event": "serve_dispute",
+        "record": {
+          "@context": "urn:keysingate:core:v3",
+          "type": "StatusRecord",
+          "v": 3,
+          "number": 5,
+          "status": 6,
+          "event": "serve_dispute",
+          "offset_ms": 9000,
+          "prev": "12209f28c8bbcaa15acb7b660b92b3cb492b9901b864543caa9be255ef30c4882d12",
+          "signatures": [
+            {
+              "kid": "did:web:issuer.example#root",
+              "alg": "Ed25519",
+              "value": "43ZjvXQLPCKqJHptp1y_43xQwTqgYwJW8PubgM2c_9T5_Dh49uaQwAPKAQtknLy9XSjpvEYhJNwj_Yy_KazoCw"
+            }
+          ]
+        },
+        "anchor": {
+          "type": "urn:ksg:anchor:vector",
+          "subject": "12207b76b0e28a5a97733dc27e892590be3b0520a72028cc03223e02d16337367d88",
+          "proof": [
+            50,
+            48,
+            50,
+            54,
+            45,
+            48,
+            57,
+            45,
+            48,
+            49,
+            84,
+            48,
+            48,
+            58,
+            48,
+            48,
+            58,
+            48,
+            48,
+            46,
+            48,
+            48,
+            48,
+            90
+          ],
+          "anchored_at": "2026-09-01T00:00:00.000Z"
+        },
+        "result": {
+          "verdict": "reject",
+          "reason": "schema: the status record carries a different status than the move"
+        }
+      }
+    },
+    {
+      "name": "an anchor of another record",
+      "case": {
+        "event": "serve_dispute",
+        "record": {
+          "@context": "urn:keysingate:core:v3",
+          "type": "StatusRecord",
+          "v": 3,
+          "number": 5,
+          "status": 30,
+          "event": "serve_dispute",
+          "offset_ms": 9000,
+          "prev": "12209f28c8bbcaa15acb7b660b92b3cb492b9901b864543caa9be255ef30c4882d12",
+          "signatures": [
+            {
+              "kid": "did:web:issuer.example#root",
+              "alg": "Ed25519",
+              "value": "pKoL21HPDaIrFAJbpT28eFkxKU-macQwZcQ2JGiKtJ4T_3WLio_o2QJBkNJSdRtF1iOemtAFIEfOw91ENHtQCg"
+            }
+          ]
+        },
+        "anchor": {
+          "type": "urn:ksg:anchor:vector",
+          "subject": "122021e87e0528885ce46680879c25a4882dec40e8bd77ae64728be267ae8a7978d2",
+          "proof": [
+            50,
+            48,
+            50,
+            54,
+            45,
+            48,
+            57,
+            45,
+            48,
+            49,
+            84,
+            48,
+            48,
+            58,
+            48,
+            48,
+            58,
+            48,
+            48,
+            46,
+            48,
+            48,
+            48,
+            90
+          ],
+          "anchored_at": "2026-09-01T00:00:00.000Z"
+        },
+        "result": {
+          "verdict": "reject",
+          "reason": "schema: the anchor attests a different subject"
+        }
+      }
+    },
+    {
+      "name": "a move the table refuses",
+      "case": {
+        "event": "apply_packet",
+        "record": {
+          "@context": "urn:keysingate:core:v3",
+          "type": "StatusRecord",
+          "v": 3,
+          "number": 5,
+          "status": 1,
+          "event": "apply_packet",
+          "offset_ms": 9000,
+          "prev": "12209f28c8bbcaa15acb7b660b92b3cb492b9901b864543caa9be255ef30c4882d12",
+          "signatures": [
+            {
+              "kid": "did:web:issuer.example#root",
+              "alg": "Ed25519",
+              "value": "TIQSR8mlO15Xy62ykN7JK-G4PwRPEHUj-0g1h6sRhtZYhEpSwNSBjUL4kzoiOePS0F3rGh-6l43kBCvYuHkyDQ"
+            }
+          ]
+        },
+        "anchor": {
+          "type": "urn:ksg:anchor:vector",
+          "subject": "12202d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881",
+          "proof": [
+            50,
+            48,
+            50,
+            54,
+            45,
+            48,
+            57,
+            45,
+            48,
+            49,
+            84,
+            48,
+            48,
+            58,
+            48,
+            48,
+            58,
+            48,
+            48,
+            46,
+            48,
+            48,
+            48,
+            90
+          ],
+          "anchored_at": "2026-09-01T00:00:00.000Z"
+        },
+        "result": {
+          "verdict": "reject",
+          "reason": "status: the packet's layer goes on before birth"
+        }
+      }
+    }
+  ]
+}

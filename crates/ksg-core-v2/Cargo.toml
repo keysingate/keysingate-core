@@ -1,0 +1,40 @@
+[package]
+name = "ksg-core-v2"
+description = "Keysingate core, version 2: documents of major version 3, the journal under the movable seal, one rule for the time bound"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+
+[dependencies]
+serde.workspace         = true
+serde_json.workspace    = true
+sha2.workspace          = true
+ed25519-dalek.workspace = true
+base64.workspace        = true
+thiserror.workspace     = true
+serde_json_canonicalizer.workspace = true
+hex.workspace           = true
+fips204.workspace  = true
+
+[dev-dependencies]
+trybuild.workspace      = true
+jsonschema.workspace    = true
+proptest.workspace      = true
+
+[lib]
+name = "ksg_core_v2"
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+# Reliability (spec v2 §16): library code returns every failure as a value.
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+indexing_slicing = "deny"

@@ -1,0 +1,64 @@
+[package]
+name = "ksg-cli-v2"
+description = "The reader on core v2: a container on disk, driven through its three buttons from a command line"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license-file           = "../../LICENSE-PROPRIETARY"
+publish                = false
+repository.workspace   = true
+
+[lib]
+name = "ksg_cli_v2"
+
+[[bin]]
+name = "ksg-remote-panel"
+path = "src/main.rs"
+
+[dependencies]
+ksg-core-v2 = { path = "../ksg-core-v2" }
+ksg-container-v2 = { path = "../ksg-container-v2" }
+ksg-verify-v2 = { path = "../ksg-verify-v2", default-features = false }
+ksg-anchor-v2 = { path = "../ksg-anchor-v2" }
+ksg-issuer-v2 = { path = "../ksg-issuer-v2" }
+ksg-mobile-v2 = { path = "../ksg-mobile-v2" }
+ksg-service-v2 = { path = "../ksg-service-v2", default-features = false }
+ureq = { version = "2", default-features = false, features = ["tls", "native-certs", "json"], optional = true }
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+zeroize.workspace = true
+# rand_core 0.6 is what frost-ed25519 takes; `getrandom` gives it the OS CSPRNG.
+rand_core = { version = "0.6", features = ["getrandom"] }
+ed25519-dalek.workspace = true
+bs58 = "0.5"
+# The issuance label of a `bare` (17.10): sealed to the owner's read key.
+x25519-dalek.workspace = true
+chacha20poly1305.workspace = true
+hkdf.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[features]
+# The HTTP client for a real node; tests reach the network through the `Rpc`
+# trait or a local server.
+default = ["rpc"]
+rpc = ["ksg-verify-v2/rpc", "dep:ureq"]
+
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[dev-dependencies]
+hex.workspace = true
+# A Base Sepolia node in the tests: the contract runs in revm (tests/mock_base).
+revm = { version = "=14.0.3", default-features = false, features = ["std"] }
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+ksg-service-v2 = { path = "../ksg-service-v2" }
+# The browser page's core, played by a thread in tests/web.rs.
+ksg-web-v2 = { path = "../ksg-web-v2" }
+rand_core = { version = "0.6", features = ["getrandom"] }

@@ -1,0 +1,863 @@
+{
+  "set": "08_status_table",
+  "spec": "core v2 §11, KS-7 §7.2-bis/ter: every status × event pair has exactly one outcome; a pair not listed is refused",
+  "statuses": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    12,
+    9,
+    10,
+    20,
+    22,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    21
+  ],
+  "terminal": [
+    7,
+    9,
+    10,
+    20,
+    22,
+    21
+  ],
+  "working": [
+    5,
+    12,
+    30,
+    31,
+    32,
+    34,
+    35
+  ],
+  "table": {
+    "0": {
+      "print_release": "refused",
+      "apply_packet": {
+        "moves": 1
+      },
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "1": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": {
+        "moves": 2
+      },
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": {
+        "moves": 20
+      },
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": {
+        "moves": 10
+      }
+    },
+    "2": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": {
+        "moves": 3
+      },
+      "initiate": {
+        "moves": 4
+      },
+      "initiate_too_late": {
+        "moves": 20
+      },
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": {
+        "moves": 10
+      }
+    },
+    "3": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": {
+        "moves": 4
+      },
+      "initiate_too_late": {
+        "moves": 20
+      },
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": {
+        "moves": 10
+      }
+    },
+    "4": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": {
+        "moves": 5
+      },
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": {
+        "moves": 22
+      },
+      "declare_container_lost": {
+        "moves": 9
+      },
+      "serve_dispute": {
+        "moves": 30
+      },
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "5": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "stays",
+      "record_artifact_or_rights": "stays",
+      "transfer_ownership": "stays",
+      "raise_class": "stays",
+      "full_export": {
+        "moves": 7
+      },
+      "finalize": {
+        "moves": 6
+      },
+      "open_voluntarily": {
+        "moves": 12
+      },
+      "freeze_on_owner_application": {
+        "moves": 6
+      },
+      "succeed": {
+        "moves": 6
+      },
+      "declare_key_lost": {
+        "moves": 22
+      },
+      "declare_container_lost": {
+        "moves": 9
+      },
+      "serve_dispute": {
+        "moves": 30
+      },
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "6": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": {
+        "moves": 7
+      },
+      "finalize": "refused",
+      "open_voluntarily": {
+        "moves": 12
+      },
+      "freeze_on_owner_application": "refused",
+      "succeed": "stays",
+      "declare_key_lost": {
+        "moves": 22
+      },
+      "declare_container_lost": {
+        "moves": 9
+      },
+      "serve_dispute": {
+        "moves": 30
+      },
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "7": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "8": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "12": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "stays",
+      "record_artifact_or_rights": "stays",
+      "transfer_ownership": "stays",
+      "raise_class": "stays",
+      "full_export": {
+        "moves": 7
+      },
+      "finalize": {
+        "moves": 6
+      },
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": {
+        "moves": 6
+      },
+      "succeed": {
+        "moves": 6
+      },
+      "declare_key_lost": {
+        "moves": 22
+      },
+      "declare_container_lost": {
+        "moves": 9
+      },
+      "serve_dispute": {
+        "moves": 30
+      },
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "9": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "10": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "20": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "22": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "30": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "stays",
+      "record_artifact_or_rights": "stays",
+      "transfer_ownership": "stays",
+      "raise_class": "stays",
+      "full_export": {
+        "moves": 7
+      },
+      "finalize": "refused",
+      "open_voluntarily": {
+        "moves": 12
+      },
+      "freeze_on_owner_application": {
+        "moves": 6
+      },
+      "succeed": {
+        "moves": 6
+      },
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": {
+        "moves": 31
+      },
+      "dispute_unproven": {
+        "moves": 32
+      },
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "stays",
+      "review_deadline_passed": "blocks",
+      "settle": {
+        "moves": 35
+      },
+      "prescription_passed": {
+        "moves": 21
+      },
+      "packet_term_expired": "refused"
+    },
+    "31": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "stays",
+      "record_artifact_or_rights": "stays",
+      "transfer_ownership": "stays",
+      "raise_class": "stays",
+      "full_export": {
+        "moves": 7
+      },
+      "finalize": "refused",
+      "open_voluntarily": {
+        "moves": 12
+      },
+      "freeze_on_owner_application": {
+        "moves": 6
+      },
+      "succeed": {
+        "moves": 6
+      },
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": {
+        "moves": 34
+      },
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "32": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "stays",
+      "record_artifact_or_rights": "stays",
+      "transfer_ownership": "stays",
+      "raise_class": "stays",
+      "full_export": {
+        "moves": 7
+      },
+      "finalize": "refused",
+      "open_voluntarily": {
+        "moves": 12
+      },
+      "freeze_on_owner_application": {
+        "moves": 6
+      },
+      "succeed": {
+        "moves": 6
+      },
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "33": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "34": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "stays",
+      "record_artifact_or_rights": "stays",
+      "transfer_ownership": "stays",
+      "raise_class": "stays",
+      "full_export": {
+        "moves": 7
+      },
+      "finalize": "refused",
+      "open_voluntarily": {
+        "moves": 12
+      },
+      "freeze_on_owner_application": {
+        "moves": 6
+      },
+      "succeed": {
+        "moves": 6
+      },
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "stays",
+      "appeal_lost": {
+        "moves": 31
+      },
+      "extend_review": "stays",
+      "review_deadline_passed": "blocks",
+      "settle": {
+        "moves": 35
+      },
+      "prescription_passed": {
+        "moves": 21
+      },
+      "packet_term_expired": "refused"
+    },
+    "35": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "stays",
+      "record_artifact_or_rights": "stays",
+      "transfer_ownership": "stays",
+      "raise_class": "stays",
+      "full_export": {
+        "moves": 7
+      },
+      "finalize": "refused",
+      "open_voluntarily": {
+        "moves": 12
+      },
+      "freeze_on_owner_application": {
+        "moves": 6
+      },
+      "succeed": {
+        "moves": 6
+      },
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    },
+    "21": {
+      "print_release": "refused",
+      "apply_packet": "refused",
+      "apply_buyer_key": "refused",
+      "apply_sub_agent_key": "refused",
+      "initiate": "refused",
+      "initiate_too_late": "refused",
+      "open_journal": "refused",
+      "record_work": "refused",
+      "record_artifact_or_rights": "refused",
+      "transfer_ownership": "refused",
+      "raise_class": "refused",
+      "full_export": "refused",
+      "finalize": "refused",
+      "open_voluntarily": "refused",
+      "freeze_on_owner_application": "refused",
+      "succeed": "refused",
+      "declare_key_lost": "refused",
+      "declare_container_lost": "refused",
+      "serve_dispute": "refused",
+      "dispute_proven": "refused",
+      "dispute_unproven": "refused",
+      "appeal": "refused",
+      "appeal_won": "refused",
+      "appeal_lost": "refused",
+      "extend_review": "refused",
+      "review_deadline_passed": "refused",
+      "settle": "refused",
+      "prescription_passed": "refused",
+      "packet_term_expired": "refused"
+    }
+  },
+  "while_blocked": {
+    "print_release": "refused",
+    "apply_packet": "refused",
+    "apply_buyer_key": "refused",
+    "apply_sub_agent_key": "refused",
+    "initiate": "refused",
+    "initiate_too_late": "refused",
+    "open_journal": "refused",
+    "record_work": "refused",
+    "record_artifact_or_rights": "refused",
+    "transfer_ownership": "refused",
+    "raise_class": "refused",
+    "full_export": "refused",
+    "finalize": "refused",
+    "open_voluntarily": "refused",
+    "freeze_on_owner_application": "refused",
+    "succeed": "refused",
+    "declare_key_lost": "refused",
+    "declare_container_lost": "refused",
+    "serve_dispute": "refused",
+    "dispute_proven": {
+      "moves": 31
+    },
+    "dispute_unproven": {
+      "moves": 32
+    },
+    "appeal": "refused",
+    "appeal_won": "refused",
+    "appeal_lost": "refused",
+    "extend_review": "refused",
+    "review_deadline_passed": "refused",
+    "settle": {
+      "moves": 35
+    },
+    "prescription_passed": {
+      "moves": 21
+    },
+    "packet_term_expired": "refused"
+  },
+  "while_blocked_note": "a blocked container takes only a decision, a settlement or the prescription, whatever its status"
+}

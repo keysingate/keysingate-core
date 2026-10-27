@@ -1,0 +1,42 @@
+[package]
+name = "ksg-verify-v2"
+description = "The third party's side on core v2: a journal export and its channel in, a verdict out"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+
+[lib]
+name = "ksg_verify_v2"
+
+[[bin]]
+name = "ksg-verify-v2"
+path = "src/main.rs"
+
+[dependencies]
+ksg-core-v2 = { path = "../ksg-core-v2" }
+serde.workspace = true
+serde_json.workspace = true
+bs58 = "0.5"
+hkdf.workspace = true
+chacha20poly1305.workspace = true
+sha2.workspace = true
+hex.workspace = true
+ed25519-dalek.workspace = true
+zeroize.workspace = true
+ureq = { version = "2", default-features = false, features = ["tls", "native-certs", "json"], optional = true }
+
+[dev-dependencies]
+fips204.workspace = true
+proptest.workspace = true
+
+[features]
+# The HTTP client for a real node. On by default for the program; the library
+# and its tests read the network through the `Rpc` trait and need none.
+default = ["rpc"]
+rpc = ["dep:ureq"]
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"

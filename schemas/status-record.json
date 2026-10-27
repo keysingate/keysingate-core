@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/status-record.json",
+  "title": "StatusRecord - one change of a container's status (core v2 section 11)",
+  "description": "A status change is a record AND its anchor; without a read anchor the status has no time (core v2 section 11, audit Ya-2). Records form a chain: record 0 is the printing and links to the section root, the hash of the emission and the serial; every next record links to the hash of the one before it. A status that does not change writes nothing.",
+  "type": "object",
+  "properties": {
+    "@context": {
+      "$ref": "common.json#/$defs/context"
+    },
+    "type": {
+      "const": "StatusRecord"
+    },
+    "v": {
+      "$ref": "common.json#/$defs/version"
+    },
+    "number": {
+      "description": "The counter. Record 0 is the printing; every change adds one.",
+      "$ref": "common.json#/$defs/safe_uint"
+    },
+    "status": {
+      "description": "The status after the change, by its normative number (KS-7). 11 and 13-19 are not statuses; 8 and 33 are reserved blanks with no transitions.",
+      "enum": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        12,
+        20,
+        21,
+        22,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35
+      ]
+    },
+    "event": {
+      "description": "The event that caused the change. Omitted, not null, on record 0, which no event caused.",
+      "enum": [
+        "print_release",
+        "apply_packet",
+        "apply_buyer_key",
+        "apply_sub_agent_key",
+        "initiate",
+        "initiate_too_late",
+        "open_journal",
+        "record_work",
+        "record_artifact_or_rights",
+        "transfer_ownership",
+        "raise_class",
+        "full_export",
+        "finalize",
+        "open_voluntarily",
+        "freeze_on_owner_application",
+        "succeed",
+        "declare_key_lost",
+        "declare_container_lost",
+        "serve_dispute",
+        "dispute_proven",
+        "dispute_unproven",
+        "appeal",
+        "appeal_won",
+        "appeal_lost",
+        "extend_review",
+        "review_deadline_passed",
+        "settle",
+        "prescription_passed",
+        "packet_term_expired"
+      ]
+    },
+    "offset_ms": {
+      "description": "Milliseconds since the packet's origin (KS-2).",
+      "$ref": "common.json#/$defs/safe_uint"
+    },
+    "prev": {
+      "description": "The previous record's hash; for record 0, the section root.",
+      "$ref": "common.json#/$defs/multihash"
+    },
+    "signatures": {
+      "$ref": "common.json#/$defs/signatures"
+    }
+  },
+  "required": [
+    "@context",
+    "type",
+    "v",
+    "number",
+    "status",
+    "offset_ms",
+    "prev",
+    "signatures"
+  ],
+  "additionalProperties": false
+}

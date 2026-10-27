@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/closure.json",
+  "title": "BlockClosure - a block closure statement (Section 12)",
+  "description": "The three sets MUST cover the block in full and be pairwise disjoint. A schema cannot express this - it is checked by the implementation, and separately: equality of the sum of lengths to the block size lets an overlap through together with a gap. For class heavy, used_not_submitted must be empty.",
+  "type": "object",
+  "properties": {
+    "@context": {
+      "$ref": "common.json#/$defs/context"
+    },
+    "type": {
+      "const": "BlockClosure"
+    },
+    "v": {
+      "$ref": "common.json#/$defs/version"
+    },
+    "emission": {
+      "type": "string",
+      "pattern": "^ksg:em:[0-9]+$"
+    },
+    "block": {
+      "$ref": "common.json#/$defs/range"
+    },
+    "used_submitted": {
+      "type": "array",
+      "items": {
+        "$ref": "common.json#/$defs/range"
+      }
+    },
+    "used_not_submitted": {
+      "description": "The act was issued but never submitted to the log - it proves no time.",
+      "type": "array",
+      "items": {
+        "$ref": "common.json#/$defs/range"
+      }
+    },
+    "cancelled": {
+      "type": "array",
+      "items": {
+        "$ref": "common.json#/$defs/range"
+      }
+    },
+    "closed_at": {
+      "$ref": "common.json#/$defs/timestamp"
+    },
+    "signatures": {
+      "$ref": "common.json#/$defs/signatures"
+    }
+  },
+  "required": [
+    "@context",
+    "type",
+    "v",
+    "emission",
+    "block",
+    "used_submitted",
+    "used_not_submitted",
+    "cancelled",
+    "closed_at",
+    "signatures"
+  ],
+  "additionalProperties": false
+}

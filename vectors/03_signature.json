@@ -1,0 +1,143 @@
+{
+  "set": "03_signature",
+  "spec": "core v2 §4: the signature covers the canonical form without `signatures`",
+  "document": {
+    "@context": "urn:keysingate:core:v3",
+    "type": "Emission",
+    "v": 3,
+    "id": "ksg:em:000001",
+    "range": {
+      "from": 1,
+      "to": 100000000
+    },
+    "block_ttl_days": 90,
+    "issuer": "did:web:issuer.example",
+    "issued_at": "2026-08-27T00:00:00.000Z",
+    "keys": [
+      {
+        "kid": "did:web:issuer.example#root",
+        "alg": "Ed25519",
+        "key": "DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A"
+      }
+    ],
+    "signatures": [
+      {
+        "kid": "did:web:issuer.example#root",
+        "alg": "Ed25519",
+        "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+      }
+    ]
+  },
+  "message": "{\"@context\":\"urn:keysingate:core:v3\",\"block_ttl_days\":90,\"id\":\"ksg:em:000001\",\"issued_at\":\"2026-08-27T00:00:00.000Z\",\"issuer\":\"did:web:issuer.example\",\"keys\":[{\"alg\":\"Ed25519\",\"key\":\"DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A\",\"kid\":\"did:web:issuer.example#root\"}],\"range\":{\"from\":1,\"to\":100000000},\"type\":\"Emission\",\"v\":3}",
+  "cases": [
+    {
+      "name": "Ed25519 over the canonical form",
+      "keys": [
+        {
+          "kid": "did:web:issuer.example#root",
+          "alg": "Ed25519",
+          "key": "DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A"
+        }
+      ],
+      "profile": [
+        "Ed25519"
+      ],
+      "signatures": [
+        {
+          "kid": "did:web:issuer.example#root",
+          "alg": "Ed25519",
+          "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+        }
+      ],
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "Ed25519 and ML-DSA-65 (deterministic, rnd = 0^32)",
+      "keys": [
+        {
+          "kid": "did:web:issuer.example#root",
+          "alg": "Ed25519",
+          "key": "DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A"
+        },
+        {
+          "kid": "did:key:zSigner#pq",
+          "alg": "ML-DSA-65",
+          "key": "KIorFScNVAdXiYbKLpQcJAIPOE3eUc2NSQ_AAHUGx8wgH7BV25WZtepUEpCIzEJjp1nEVhKc1pz0CvoH1F88gDc8fVdkeyViOpXSTDA4Ak-O8QevE5cqiu9SY6zdEmlqA03UVPt57pe7fDyx2YWt79kFixVkTsgU9V1M9jdX85FjKNZVlew2b1aokjqSCPtWopWPXDVi1rYvX2FNInHTWwEwCf98Ok40NsWT1idIvD5Wx7Y2QOGJzgvz9L_l_DxvNBu4wn_aqWssVuK53WXcV4qj-QMiEX6_u85duSwfXYueBqgYowQQJ9CL4_iLchboBmpWZ6VdS76ZFzhvEbkR7w8GTmsQ7dD6f-ioWmCAUZxdbwK7fatq7MY3HoEqQuqshrlvB-UfdeGw_sWHXwaoPMCbamX-eEfJy8bUBUxSkXniSaP_hOA0P3bDvke4ykFEryXBSBSa7hMgNVGHrCZjnDGa7pyL3Y4FP1xM_KZYJWMmVmtj7oCt2Ncyn4hMjSZ3dZMlqiIe24tlIfYcCPy7-LDBE6Xw9_cpQtOzLYPnsPXQTadV4euSa5wHYe3oNunuMCs7yoBh5oy-SFjkataVvbt-7Oqjz3LPjQzfYhJ_PbW1Ol1VV3fSSt6rt1sutMXk8rpHZ94mrGpPxjOGKC00wKpC4MwuU5NzNdU53HnvFvmlCAdkzUNGkgxsGiOIxBu0eESr0O0m8omX2CwBGqfGh2vxhInMFt8Y5ixBsoGgOkkejlpBfkV8tnNFruFLkaco9Cyari3jXRgZbUimV6lqbeMLnJ6SVehogiycT5lwhANejbQLBNctl926utOnH20MURhc_i5nCi8XAU8G0oDmzE3UShQvt1jhVtPEdU27i1PxZfpFYqPJoAmPM5vnxyKxBCLG-HTrHlGxDAG5Pytu3R2qj9nx26wT7EE93Tqo8gL6_jrnbOsdDyhZ6FQYPfOFgJH-llVUUd_ZyCPJ6yz7NuRu2wsx50Fg_YCI2sEbSSO4hPe6xYHqCWafkkoA0mS80L4pefMeSmsPvSFAP_ABQOSJqUmLemJp18TwMD3itXlANLY3srgmbhAFZAENtDCvX4eHw4ZBr5CC5LUGX0Oh-UUqvpX69FEYg7beHAoZDZKmK9t3_XSFA0GpVJhGGmF-mx2hDqBoqlFPTyKUPd7WboEsAlgjOW10tpcDhg6N9T23RL80QDYi3AGaKE_zngo7X5O9uziWsuc6wqmoS0wNSCP7opSIhoRaFbqCfk-kiHl-5iGmn9JarVcS8N55AB6xwi9-REsDeiJogmjV9pdcyDAP6SziNH-ecCSxBbLdNKS2x6QjJqzYL3VlAeQE3n1W6BQ50oJd72NrNWL_lMxdm6o52w2hskMkglSPlA82YeC3yso8GvOqBFOD7KnuPbQS6m19zKkHa-oKecv2cuvS4qxFKMDf5CleCgA8WGGIioJT8gx0AG4dGyb3OFh-JKfaRpLVPHKKrc-aHUzW2cY44V4A4wHKSErb27izl3o9wzoFi92tYwmqUCInLeVsLWIpLTld1_Tq-PEDzcZq1cfEdqusPT-4QuHK8AIBdP0CE826u0S549qHlIYYvIW_E9_o2T6dusrbSJHYjUZBfMUCHDprlA_WaKOudJBDCN2P7SY6pah0_cE1jxQtveCfIjdj7dNWzZ-fPZpzmNqiIBnhCL2ZxDHPYhNlWdApssfnkdEWKQPsEOrvlCczooS3MnKmzbblVQxXW96xhg1Y7m6BS3dIhNJ1eJf_f3LIKTcdFY1hT3sgj69XNkn85cT4ejgx40majeZ3lg9HJUmuCbzddrjw3VAxn0Z0bFgkAarxuI-OXLzpRplqTPJ1rlhz8-UzrLRCxjTAG5_qO-EJeUmVYQns2stDgJ_U-kuT4rZxRfccYtyf7NHfmIYHMMWQGE0ZFchWHOB2eTCRcpGP53aHvqwTBstEmFKB5G9bgqFWXHjttN3kUqiVQyfkgJvPlN9STcnJS223cnXeisdKrhxKKW89hL7MURxHVSRj1qDBaONMnGCDYvYWfRSNjtRSTvJ2s7J7Gm0WGbh1FnGLBCRhY3gW7fsuMhSozaid9u3qQvWGWiDMwcfvwhIlIl1q4wpoLwAl_vGAoUjQ9y2_dfn26lHPG1ZxwTjss2xoE2Vww7UsYdYyFHck8iDZzO-JBOB-QXkTdmHceCBlbz4UUDmSFtgMHuOeXFARxdw5MpfTJOin0kOAi5ZqmbCmwge5MQzFbjXuEheQiV249wxx546YK8I3J1rDs_un8OYv4X87_l51X9ak_8yB6jQpd8CBBrgKnQ9_Ei73AxMTjM8AER1zmbmNHHgDHY4BI3tbsfNHNJ56g_x1EGlQhzFoGv_LJXrWztVjmAnmsNG5UJihJfCK3WXFkKqyO3lI5Q-R8Wy01X0I3Q-ziWOt4mQfQ5KK5jxpbkU7Ii-ofaQLVebOlHcFraPL2CfhMtfcIK5gJNcJquE5JhUlYANhtJ5t9aAmEEeargCEkaLYE_cQD6iOuKTptnzMsBPM1Guy64HLK8G-sO6alCsAnX0_2KaFOFizRfwMB46TcXgBy6eh-ySFV0XjWYxpgBJFTNhDXQl6CBZmMuA"
+        }
+      ],
+      "profile": [
+        "Ed25519",
+        "ML-DSA-65"
+      ],
+      "signatures": [
+        {
+          "kid": "did:web:issuer.example#root",
+          "alg": "Ed25519",
+          "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+        },
+        {
+          "kid": "did:key:zSigner#pq",
+          "alg": "ML-DSA-65",
+          "value": "R-ngqZELpwWuisAABx6jmwaav50nK2cfSScpBgenOlvmXKFDludb_63Zg-XPX2erm58uUAB4sJKT7R8MwnYnqx7HQ7WU40VEJrJUYC2qKUPTV-Vp57ri0IpULzDGBG1qutitbFIJITtmuyKsxzCiLKbHsUVEto97WhrOlBMiu_bXiVUKp0WMKhcxK9dY2AXWPTOrVz1BLYmvP1HK5eHqfYplp5GFRMtjb3tYMKLQQPB8c6N6HpjuzC2e16cbSrLmRfwi3qwjVZUrOUjtZwVYig4nt_mEZjiiKrxYF_dq2_sAwm28sFJXjZqHYOoKMJ6bCdnLSkXnadRNs_BtncBmp9E272GLwRYF9ge0a8x-n4tZAWqtOnEcISOeyM9l-wIgYrH7tWBWZ7zE3LrBmwov4faRwCxrQicmI92R3k0LwgL8EuLUniHIFC9x2yBnsTSMOLke83enpkt89y9lbu9v4UKi88qUSMWx6Hccq76GMngSzcqdarg_5eplqVDiLEZFyYAVQSQ6YKSzn5WAxOMmYUrzB0qSQhpgoTOZpla6zz2rg1ZpdOHOq1fpAdcGMu98lkuh746ntf6qBrf3ubivPMyWHP0SmvH3iJOJQmRLo2vfIjiwZnHbl61Bb9Bit7xrEe4oP3W__Qbeha9q8ZJ5LV_BpuoTYbi9uAZTmleiDolS2bI1970xGvyx1HOaLXG69bLG_LaeBuJG8GvHcvVXqVi57UZEe1rT5R1gfMCt4OQW0cMLqk-Z6yIWa3KMPGSqBlRrdS2V9KAO_Z1HyBUtPH4jFBSvC9IG2T2c9xTo4o6abKQcOVPDl0IO3X0yoDx8BNU6BKrNuOTaWEHGNVcZlqv6Vk0vesc9NsbmpHDT6D5AS-wLFTljiTJl-wNgM4AxgvyIWjsEy20_RZvu5C4SvDasmsTz1wf9P2BZTv3gfwAmHk5A6lHpZ9eKRs40enPuRzayIY9O_6xNeWr7cVQaEl4mEUZIkDIbTx6m3w23T58OcfNrUaNDZGuIWd8T0H1ALaaK8tqIDpwPvowf4HJCyHzLtdBUuehOscb9B_7KEVz4Y7VPP4FRQT3I-N8OThfEs5XUaFi5ygqgTrC-MrpUB0kd1JVylgaBlz_jjyH7Yif1osknyt6X_WCQU3rnkEON1uOJws7hvGjI6ESRrs7MxQtf3f6kmb2OR-Nac1FQfoTKPczD_91L4vk2iEhvR-vvgMAmN_uBqT1cemilXM8JKM7ODt_5EUAp24rpmdZItf0cd0j1f76LCykzuOH2_OgpK0ayM0KbVLw9bqbMKcKt56Vq5-Y2J9s1KtRst2lv8NIH-kyi-C7fxjCQjQuUaMRGKJ6nh0OAlyo5knEMiqdBNZcb4JG0BlzfWzzSx2VyMVNQP1IOgdWmhGomjxAtUA_wmFceA2t5jmR9cIROR2yjpwaIvfPPPo7RKxGVzF8cdQWrf0SuPdsviW-zEym8TwAZBpCcq1SVO7NR3LbIosVwSfIvm8rNWR8-YpyrowIcl_LoB9-xmiPcFLceuvPiTAYElrE7W5OClLnV90tmVUoPiI6rjuVOvH-X_hSnWABnytVqONTaNAqPfAd8T1LNzd30vTesLu37KDKwmNMXlWOjutl0Z5Ta_VYZdwMOoO7ZRdIZWX6ovv0AqKfZKGpHwxn1Je34W0Gm_RrXlO0-1ETb5GAuvCFrD5UEK8lwxLSqmZHdhR86KlUHvEqEAikF2bSXBqdYrbgJ-mQ4TiUArFVPIJLsgIibFIHlKkDY-1HW11KULRdD0OP_CEUoCme7rW14yd97M8Ftv6hBQv346HMKWCzI_d-wvFQRpNNIBgPitVxiEgkSBZxMEkP8XMdOhLWS7xKCGZGLNygp205KrNr4g3ulw0Lig6J1qHl-aV5YVr8doGzphrSIo7MwrX74nlPrtWmKjZlkF8UK27KSiuTjWJR0MgcnUIOlZLPeLG8nVRWJLufTVd4cSE3jGGXXT4Gl_Se2f_X_IBgODXu3217jffO_OLpUqsRzt7mhv0nernvSJtP8_G7dTa3f4FjWo5Yj-PH5zcm_IPVk9vdq9iEveM4NtZTcdQBT0H5EU4dxNUjfSC1RpLw9XTGA1cWZLg_ePA1rFoCxKPKLyKM_PUSMByiF2rL96hIA_5biTPulXKVlHpke1URVqKYuJnQxUMifpJg77PJnHF1L7LSp92dOx9IIGF8nuosNGh6uw8yrK7voTONZei70_0zYOSD-KuAgfC69CUImCBK2_1zYqbXsf9Ni6-m2yPC-bwJho64pDaMDSAx3tKDPrGVfPFAEWssAohptBt6oRJB4QbtcC1oN2iFg2CrLbJRt2Y5SsqGIdSWqOzgoU0zAMSnc3dOMGb8ZiFWT5s4Unpnn3w2sx8vG8guUDF6134QiIa5iVDgLNkJD0ziW73wOoobX84AFfEHc-0dt1eFTCcCiSyt9Rk2qpz_JED6Auxf2wvz-7utv7z9NakXozVnilLWLZrM7T6R6MOTk0LKsKWKrQJaHNuiHbW_DXolcAk1q58wWzNXG2atioiCyGy54qa7BH5JLp6R_FmLe33ohPojIbHgJn0DbQIElTp7e2F-h-G00L2TgJAfnLy2SrxPRYUty1_HRVzlhKrFDfmZox-XwFY8aUKo0kB7xlwYdBD233Yp6AiNX1llKMNOTPF1ahAwhyAWnrnsYqQXV6f7xIKarZyAwkayrmvojHZdYdT04kuAoZxLPriMHwqw5rPEKk5_Iv4RJLeP0yHbOzgQGKYsLcgKQ0FCG4KJYCOTGOYgmXQrY_Nrq5fJJFsFoUXJReYo_nKUT1pR4eSPpzfsEMa3bYVnwOB03h_VjOytKuHWeXy5UPI4xzbA6uLqBIK1DcgrFcxnG0T1l0QsBseg6Aya_5z3jF6D90h0RYzUxUy158AV-XCediIyBrmHnS0EATe2qq1NMm-n-TmvQ2-xNtLDsi0hAxfODPLV3I-CWkRRcE22UT9IvKpKVE2DqIh1CII7RiZoCFqLR8lCEje9Gp7SW96uWexwv9j_gLp9jdvuc5CkzYKBivy4nm5P7gd3xxqU4GleUmk1rSwDbLdVKuAlSW1Y4jMBe9TH3To23o5gUizUVVy-TJpqpT3Lte9NNOHiv5msmK7wULqifYfo3RqJvKymE6xu4dHtMRRo9b3pHXYikP5CvoT6NGqEx3KVz8X_QHsszqr7NAKZx7URyEoQFdYqUAmkrLDEFaUe8NjW3yWGiLP27uztMFMV8yBW5OIzb2n_ptKPnsfh3SdU5nwr6JfBU3aKngLAuGyJ_nxyyg_apCKVrGKuQ5StXhum7eoRFuxuM7FQscmp3LAeaZpuuAmfoItCM1AOcSpdYfsdfQ8tSobttySkxpFWWwPE3k4T7Q9Ryow81W4FgafmKFNAq2BUlu7_0Hx-jkk0x-hjhvdTTv2wFJNp8ODsoOIa6mIYToZ6g2jfSxse6IdR0Zorgprmfpz5r58VRQqU2ONIcv1uny4rjqbPuSpzoBfI6xoW1klp7pPPZ7LymtvjXOopXWTOL7xwb7FM9EfVxzGMTqyvUOHC8u1zrtfAAd15L6p38WYxuTfssWbecKWyrOiQIftktYnyE01WFrcu64fj-rD0JcW-vZ42ZkAjNAoOTL3uP_A4bckeZlBztpJtaQwSgYtsNM-eTpCmAuHCecjGUJ53HziratxxDqIijbignDe55csB3FzCVri9wJOS9MHYOHOsEh2HOfrKPrpauABD2Yqldm65AGR-craCHPKKN48FgknJPlgjntVnWFBqrruTz_fqblR8imzp7dpnkedtPWJguXlhxT3QLb3HmBfpj42sb7BH8M86MGgSLtxDQrh53y3VW9XnbY2Wf03LOn5pn9T6l6BkMy2NISUDrnsuYxvMQcLvzOZGG-WIYWsa1PuZlvLyhKnpb6TIcy6QimwPynye3Im7S396vyh1aNTiO4PMsNlVgqYYaBBKZ7zXDgfrBGpyoKdvgFG1gBqF6Vf3lgk9bGwPUzwAU1qnJc6zhomcbNd_c0SBvDP49mX_kGxhUeMUm7Az2iy2r9DrgmBArUztb2xqqbOC0S-bRRPtfUIv26D4EE1S3w6ScbCA8dCoTZpongtUVk6WO7gXvukF693BeDAqPTBkintZ2YwlV4JgaBwyXVlIP_G6-WqJXTyqS49ijhTfzdwryKpcLEDkEveoF1dFQOlmmVS0UmrJO1kAZd-nkVXP4krZtOM-Aq8eEcy1d89zTRz3HruI6Pm4vbrnCk6z67tjOvXXGBLMPxrz6aJH8cwcRzbuIubLdqDh89jv3hM2z78WRuJpPN7G7WN0IJAwceXxihpOqDxEYHipDd5KsvcPJ0t_k7gQJGV1ff4y59SswO0SHkKr2LEVHVV-r6RczXmrxAAAAAAAABBQdJSwx"
+        }
+      ],
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "the profile asks for ML-DSA-65 and only Ed25519 is there",
+      "profile": [
+        "Ed25519",
+        "ML-DSA-65"
+      ],
+      "signatures": [
+        {
+          "kid": "did:web:issuer.example#root",
+          "alg": "Ed25519",
+          "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+        }
+      ],
+      "result": {
+        "verdict": "reject",
+        "reason": "signature ML-DSA-65: a signature required by the profile is absent"
+      }
+    },
+    {
+      "name": "one character of the signature changed",
+      "profile": [
+        "Ed25519"
+      ],
+      "signatures": [
+        {
+          "kid": "did:web:issuer.example#root",
+          "alg": "Ed25519",
+          "value": "AaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+        }
+      ],
+      "result": {
+        "verdict": "reject",
+        "reason": "signature Ed25519: does not match the message"
+      }
+    },
+    {
+      "name": "a key outside the presented set",
+      "profile": [
+        "Ed25519"
+      ],
+      "signatures": [
+        {
+          "kid": "did:web:nobody.example#x1",
+          "alg": "Ed25519",
+          "value": "MLBO0DByoOwFtmm7E4BIcJrGGZWE7o2hRYlgNAw74tNWJykVZrqakYV9EDuNGXevMMoURca_SxZkSHEy1ib0DA"
+        }
+      ],
+      "result": {
+        "verdict": "reject",
+        "reason": "signature Ed25519: key not found"
+      }
+    }
+  ]
+}

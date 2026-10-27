@@ -1,0 +1,117 @@
+{
+  "set": "07_promotion",
+  "spec": "core v2 §8.7: upward only, signed by the issuer and the holder",
+  "container": "1220ee9c815ae594fa197581c002ba5c1fcbe2a210e3123dd3652aa2bd9071c6878f",
+  "cases": [
+    {
+      "name": "light to heavy, two parties",
+      "current": "light",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "ClassPromotion",
+        "v": 3,
+        "container": "1220ee9c815ae594fa197581c002ba5c1fcbe2a210e3123dd3652aa2bd9071c6878f",
+        "from": "light",
+        "to": "heavy",
+        "offset_ms": 86400000,
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "1Crijcz4fs8xrlBaIY2SlrV6Mpqe4vJT7Nf1jKULwEhH4xQlXu_9itrqapVmeV1B291uhCAunc4kpm3EueeABw"
+          },
+          {
+            "kid": "did:key:zOwner#o1",
+            "alg": "Ed25519",
+            "value": "1MjZl6QcRJvIIBR2pZy73SVbsecfGsHDGBWsx56G470WcAzqJSYk0wTpelFqXSyDtFZDLKHxoeZxt7jk2l6_Dg"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "heavy to light",
+      "current": "heavy",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "ClassPromotion",
+        "v": 3,
+        "container": "1220ee9c815ae594fa197581c002ba5c1fcbe2a210e3123dd3652aa2bd9071c6878f",
+        "from": "heavy",
+        "to": "light",
+        "offset_ms": 86400000,
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "T8ev2HnAcpYtMnh5Eqy58dqlXX4zFnAnfLWX6VuzKySrj_IH_-_F9zBnBgleBVTmOEZDviniC4mpXPa92VKmAA"
+          },
+          {
+            "kid": "did:key:zOwner#o1",
+            "alg": "Ed25519",
+            "value": "XGNWKQFQvve_NDzoYxc1_UFgkpV6mwpZIx3luqwc4aGIRr1KUzSmmonMp0G8DeXn1NWyBCOuMCY3IIpL4OHEBg"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "schema: ClassPromotion does not go upward"
+      }
+    },
+    {
+      "name": "one party",
+      "current": "light",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "ClassPromotion",
+        "v": 3,
+        "container": "1220ee9c815ae594fa197581c002ba5c1fcbe2a210e3123dd3652aa2bd9071c6878f",
+        "from": "light",
+        "to": "heavy",
+        "offset_ms": 86400000,
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "1Crijcz4fs8xrlBaIY2SlrV6Mpqe4vJT7Nf1jKULwEhH4xQlXu_9itrqapVmeV1B291uhCAunc4kpm3EueeABw"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "schema: ClassPromotion needs two signatures from two different parties"
+      }
+    },
+    {
+      "name": "from a class the container does not hold",
+      "current": "bare",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "ClassPromotion",
+        "v": 3,
+        "container": "1220ee9c815ae594fa197581c002ba5c1fcbe2a210e3123dd3652aa2bd9071c6878f",
+        "from": "light",
+        "to": "heavy",
+        "offset_ms": 86400000,
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "1Crijcz4fs8xrlBaIY2SlrV6Mpqe4vJT7Nf1jKULwEhH4xQlXu_9itrqapVmeV1B291uhCAunc4kpm3EueeABw"
+          },
+          {
+            "kid": "did:key:zOwner#o1",
+            "alg": "Ed25519",
+            "value": "1MjZl6QcRJvIIBR2pZy73SVbsecfGsHDGBWsx56G470WcAzqJSYk0wTpelFqXSyDtFZDLKHxoeZxt7jk2l6_Dg"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "schema: ClassPromotion.from is not the class the container holds"
+      }
+    }
+  ]
+}

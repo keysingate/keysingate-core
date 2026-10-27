@@ -1,0 +1,30 @@
+[package]
+name = "ksg-custody-v2"
+description = "Threshold custody of the issuer's key on core v2: 3 of 5, and nothing else"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license-file           = "../../LICENSE-PROPRIETARY"
+publish                = false
+repository.workspace   = true
+
+[dependencies]
+ksg-core-v2 = { path = "../ksg-core-v2" }
+serde.workspace     = true
+sha2.workspace      = true
+hex.workspace       = true
+thiserror.workspace = true
+zeroize.workspace   = true
+# The CSPRNG bound for `split_with_rng`; no generator is linked in here.
+rand_core = { version = "0.6", default-features = false }
+
+[dev-dependencies]
+serde_json.workspace = true
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+[lints.rust]
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+

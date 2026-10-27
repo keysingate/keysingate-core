@@ -1,0 +1,91 @@
+{
+  "set": "12_merkle",
+  "spec": "core v2 §10.3: RFC 6962, hash_leaf = SHA-256(0x00‖d), hash_node = SHA-256(0x01‖l‖r); external CT values are checked in ksg-core-v2/tests/ct_vectors.rs",
+  "leaf_data_hex": [
+    "00",
+    "01",
+    "02",
+    "03",
+    "04",
+    "05",
+    "06"
+  ],
+  "leaf_hashes": [
+    "122096a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7",
+    "1220b413f47d13ee2fe6c845b2ee141af81de858df4ec549a58b7970bb96645bc8d2",
+    "1220fcf0a6c700dd13e274b6fba8deea8dd9b26e4eedde3495717cac8408c9c5177f",
+    "1220583c7dfb7b3055d99465544032a571e10a134b1b6f769422bbb71fd7fa167a5d",
+    "12204f35212d12f9ad2036492c95f1fe79baf4ec7bd9bef3dffa7579f2293ff546a4",
+    "12209f1afa4dc124cba73134e82ff50f17c8f7164257c79fed9a13f5943a6acb8e3d",
+    "122040d88127d4d31a3891f41598eeed41174e5bc89b1eb9bbd66a8cbfc09956a3fd"
+  ],
+  "root": "12203560191803028444b232018ac047fdb561c09c23a7a6876c85e08b5e4d48e9f3",
+  "proofs": [
+    {
+      "index": 0,
+      "path": [
+        "1220b413f47d13ee2fe6c845b2ee141af81de858df4ec549a58b7970bb96645bc8d2",
+        "122052c56b473e5246933e7852989cd9feba3b38f078742b93afff1e65ed46797825",
+        "122089c929834ed1459b07f65b5e1a2143a8cf5d8efdf30f49ffffa328bb1d9133bb"
+      ],
+      "verifies": true
+    },
+    {
+      "index": 1,
+      "path": [
+        "122096a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7",
+        "122052c56b473e5246933e7852989cd9feba3b38f078742b93afff1e65ed46797825",
+        "122089c929834ed1459b07f65b5e1a2143a8cf5d8efdf30f49ffffa328bb1d9133bb"
+      ],
+      "verifies": true
+    },
+    {
+      "index": 2,
+      "path": [
+        "1220583c7dfb7b3055d99465544032a571e10a134b1b6f769422bbb71fd7fa167a5d",
+        "1220a20bf9a7cc2dc8a08f5f415a71b19f6ac427bab54d24eec868b5d3103449953a",
+        "122089c929834ed1459b07f65b5e1a2143a8cf5d8efdf30f49ffffa328bb1d9133bb"
+      ],
+      "verifies": true
+    },
+    {
+      "index": 3,
+      "path": [
+        "1220fcf0a6c700dd13e274b6fba8deea8dd9b26e4eedde3495717cac8408c9c5177f",
+        "1220a20bf9a7cc2dc8a08f5f415a71b19f6ac427bab54d24eec868b5d3103449953a",
+        "122089c929834ed1459b07f65b5e1a2143a8cf5d8efdf30f49ffffa328bb1d9133bb"
+      ],
+      "verifies": true
+    },
+    {
+      "index": 4,
+      "path": [
+        "12209f1afa4dc124cba73134e82ff50f17c8f7164257c79fed9a13f5943a6acb8e3d",
+        "122040d88127d4d31a3891f41598eeed41174e5bc89b1eb9bbd66a8cbfc09956a3fd",
+        "12209bcd51240af4005168f033121ba85be5a6ed4f0e6a5fac262066729b8fbfdecb"
+      ],
+      "verifies": true
+    },
+    {
+      "index": 5,
+      "path": [
+        "12204f35212d12f9ad2036492c95f1fe79baf4ec7bd9bef3dffa7579f2293ff546a4",
+        "122040d88127d4d31a3891f41598eeed41174e5bc89b1eb9bbd66a8cbfc09956a3fd",
+        "12209bcd51240af4005168f033121ba85be5a6ed4f0e6a5fac262066729b8fbfdecb"
+      ],
+      "verifies": true
+    },
+    {
+      "index": 6,
+      "path": [
+        "12204b8c129ed14cce2c08cfc6766db7f8cdb133b5f698b8de3d5890ea7ff7f0a8d1",
+        "12209bcd51240af4005168f033121ba85be5a6ed4f0e6a5fac262066729b8fbfdecb"
+      ],
+      "verifies": true
+    }
+  ],
+  "negative": {
+    "name": "the path of leaf 2 presented for leaf 3",
+    "verifies": false
+  }
+}

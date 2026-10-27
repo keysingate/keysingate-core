@@ -1,0 +1,30 @@
+[package]
+name = "ksg-anchor-v2"
+description = "Writing anchors on Solana for core v2: the memo transaction, built and signed without an SDK"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+
+[lib]
+name = "ksg_anchor_v2"
+
+[dependencies]
+ed25519-dalek.workspace = true
+zeroize.workspace       = true
+bs58 = "0.5"
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+sha3 = "0.10"
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+
+[dev-dependencies]
+# The contract's rules are run in an EVM inside the test, no node needed.
+ksg-verify-v2 = { path = "../ksg-verify-v2", default-features = false }
+revm = { version = "=14.0.3", default-features = false, features = ["std"] }
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"

@@ -1,0 +1,54 @@
+[package]
+name = "ksg-service-v2"
+description = "The network side on core v2: the desk for requests to someone else's anchor ('who looked') and the anchoring queue"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license-file           = "../../LICENSE-PROPRIETARY"
+publish                = false
+repository.workspace   = true
+
+[lib]
+name = "ksg_service_v2"
+
+[dependencies]
+ksg-core-v2 = { path = "../ksg-core-v2" }
+ksg-container-v2 = { path = "../ksg-container-v2" }
+ksg-verify-v2 = { path = "../ksg-verify-v2", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+ksg-anchor-v2 = { path = "../ksg-anchor-v2" }
+ed25519-dalek.workspace = true
+zeroize.workspace = true
+base64.workspace = true
+bs58 = "0.5"
+rand_core = { version = "0.6", features = ["getrandom"] }
+tiny_http = { version = "0.12", optional = true }
+
+[features]
+# The server process and the HTTP client of a real node. The library alone —
+# the desk, the queue, the adapters behind traits — builds without either.
+default = ["server"]
+server = ["ksg-verify-v2/rpc", "dep:tiny_http"]
+
+[[bin]]
+name = "ksg-service"
+path = "src/main.rs"
+required-features = ["server"]
+
+[dev-dependencies]
+ureq = { version = "2", default-features = false, features = ["json"] }
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+indexing_slicing = "deny"

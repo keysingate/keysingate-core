@@ -1,0 +1,23 @@
+[package]
+name = "ksg-pay-v2"
+description = "The issuer's till: x402 payment, seller's side (exact scheme, EIP-3009 USDC), checked before a paid bare is handed over"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+
+[lib]
+name = "ksg_pay_v2"
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+base64.workspace     = true
+hex.workspace        = true
+sha3  = "0.10"
+k256  = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+
+[dev-dependencies]
+ksg-verify-v2 = { path = "../ksg-verify-v2" }
+ksg-core-v2   = { path = "../ksg-core-v2" }

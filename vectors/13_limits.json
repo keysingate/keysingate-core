@@ -1,0 +1,107 @@
+{
+  "set": "13_limits",
+  "spec": "core v2 §14: every input has a ceiling, checked before the work it bounds",
+  "limits": {
+    "document_bytes": 65536,
+    "export_bytes": 8388608,
+    "signatures": 8,
+    "anchors": 16,
+    "merkle_path": 64,
+    "delegation_depth": 4,
+    "key_inclusions": 1024,
+    "status_records": 1024,
+    "journal_pages": 1103
+  },
+  "cases": [
+    {
+      "name": "a document one byte past 64 KiB",
+      "bytes": 65537,
+      "result": {
+        "verdict": "reject",
+        "reason": "past the limit: document size"
+      }
+    },
+    {
+      "name": "nine signatures",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "Emission",
+        "v": 3,
+        "id": "ksg:em:000001",
+        "range": {
+          "from": 1,
+          "to": 100000000
+        },
+        "block_ttl_days": 90,
+        "issuer": "did:web:issuer.example",
+        "issued_at": "2026-08-27T00:00:00.000Z",
+        "keys": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "key": "DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A"
+          }
+        ],
+        "signatures": [
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+          },
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+          },
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+          },
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+          },
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+          },
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+          },
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+          },
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+          },
+          {
+            "kid": "did:web:issuer.example#root",
+            "alg": "Ed25519",
+            "value": "EaP07gxy_1AnPLuQu86hWfAL72DAYxcSo1lAWaj09PvCH7CXRn8yo8oE2sjbzcmICpHgwY61UZMdZyojYGeFCA"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "past the limit: signatures"
+      }
+    },
+    {
+      "name": "six links of delegation",
+      "delegations": 6,
+      "result": {
+        "verdict": "reject",
+        "reason": "schema: the delegation chain is past the channel limit"
+      }
+    }
+  ]
+}

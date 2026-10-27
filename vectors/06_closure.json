@@ -1,0 +1,209 @@
+{
+  "set": "06_closure",
+  "spec": "core v2 §8.4: used-submitted, used-not-submitted and cancelled partition the packet exactly",
+  "cases": [
+    {
+      "name": "heavy, cancelled is the complement",
+      "class": "heavy",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "BlockClosure",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "block": {
+          "from": 4700000,
+          "to": 4700999
+        },
+        "used_submitted": [
+          {
+            "from": 4700000,
+            "to": 4700399
+          }
+        ],
+        "used_not_submitted": [],
+        "cancelled": [
+          {
+            "from": 4700400,
+            "to": 4700999
+          }
+        ],
+        "closed_at": "2026-08-28T00:00:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:key:zAgent#k0",
+            "alg": "Ed25519",
+            "value": "rUh1-9oPrTpKbwuOXjmwe48faXxi6bwahX5YzocqlIhvTf7qLe0JF_0EvCG4XBdqUM2wmtomyyi5r7cgn_c2CA"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "light, both used buckets",
+      "class": "light",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "BlockClosure",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "block": {
+          "from": 4700000,
+          "to": 4700999
+        },
+        "used_submitted": [
+          {
+            "from": 4700000,
+            "to": 4700099
+          }
+        ],
+        "used_not_submitted": [
+          {
+            "from": 4700100,
+            "to": 4700199
+          }
+        ],
+        "cancelled": [
+          {
+            "from": 4700200,
+            "to": 4700999
+          }
+        ],
+        "closed_at": "2026-08-28T00:00:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:key:zAgent#k0",
+            "alg": "Ed25519",
+            "value": "HHbfnGfXr3qq2VVJnFt1xMfp7HGoLlgNtUdUgkp5hojAOsPYdNnhVGFXW6wcnMz6Y-mtTm0T1-yugNqA2LNCBA"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "accept"
+      }
+    },
+    {
+      "name": "heavy cannot have used-not-submitted",
+      "class": "heavy",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "BlockClosure",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "block": {
+          "from": 4700000,
+          "to": 4700999
+        },
+        "used_submitted": [
+          {
+            "from": 4700000,
+            "to": 4700099
+          }
+        ],
+        "used_not_submitted": [
+          {
+            "from": 4700100,
+            "to": 4700199
+          }
+        ],
+        "cancelled": [
+          {
+            "from": 4700200,
+            "to": 4700999
+          }
+        ],
+        "closed_at": "2026-08-28T00:00:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:key:zAgent#k0",
+            "alg": "Ed25519",
+            "value": "HHbfnGfXr3qq2VVJnFt1xMfp7HGoLlgNtUdUgkp5hojAOsPYdNnhVGFXW6wcnMz6Y-mtTm0T1-yugNqA2LNCBA"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "closing allocation: non-empty used_not_submitted on the heavy class"
+      }
+    },
+    {
+      "name": "a serial covered by nothing",
+      "class": "heavy",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "BlockClosure",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "block": {
+          "from": 4700000,
+          "to": 4700999
+        },
+        "used_submitted": [
+          {
+            "from": 4700000,
+            "to": 4700399
+          }
+        ],
+        "used_not_submitted": [],
+        "cancelled": [
+          {
+            "from": 4700401,
+            "to": 4700999
+          }
+        ],
+        "closed_at": "2026-08-28T00:00:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:key:zAgent#k0",
+            "alg": "Ed25519",
+            "value": "ZCEauUCTCqIesqhWzFhu7lVxMAieM4XcayHMZaMN1qCgNpx8fA9MBQgZGXiIQwbNkMk8dqYcgbBob9_8yMZJDg"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "closing allocation: serial 4700400 is not covered"
+      }
+    },
+    {
+      "name": "a serial covered twice",
+      "class": "heavy",
+      "document": {
+        "@context": "urn:keysingate:core:v3",
+        "type": "BlockClosure",
+        "v": 3,
+        "emission": "ksg:em:000001",
+        "block": {
+          "from": 4700000,
+          "to": 4700999
+        },
+        "used_submitted": [
+          {
+            "from": 4700000,
+            "to": 4700399
+          }
+        ],
+        "used_not_submitted": [],
+        "cancelled": [
+          {
+            "from": 4700399,
+            "to": 4700999
+          }
+        ],
+        "closed_at": "2026-08-28T00:00:00.000Z",
+        "signatures": [
+          {
+            "kid": "did:key:zAgent#k0",
+            "alg": "Ed25519",
+            "value": "TK1i8J7Ff9JFdUF3tqdsnevcUVBzAuD7xMMZqVmXwMjNFqZhVgzrdBex7w06FV8BxnRB_pEUr1nATj_IJ3E0Cw"
+          }
+        ]
+      },
+      "result": {
+        "verdict": "reject",
+        "reason": "closing allocation: serial 4700399 is covered twice"
+      }
+    }
+  ]
+}

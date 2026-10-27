@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/allocation.json",
+  "title": "BlockAllocation - allocation of a block to a holder (Section 7)",
+  "description": "Coordination is required only here. Use of serial numbers within a block is offline and in any order.",
+  "type": "object",
+  "properties": {
+    "@context": {
+      "$ref": "common.json#/$defs/context"
+    },
+    "type": {
+      "const": "BlockAllocation"
+    },
+    "v": {
+      "$ref": "common.json#/$defs/version"
+    },
+    "emission": {
+      "type": "string",
+      "pattern": "^ksg:em:[0-9]+$"
+    },
+    "block": {
+      "$ref": "common.json#/$defs/range"
+    },
+    "class": {
+      "description": "The tariff and the form the journal opens in, not an anchoring regime for life (core v2 section 9): heavy opens Pro; light opens light and may go Pro; bare stays light and is never anchored.",
+      "enum": [
+        "heavy",
+        "light",
+        "bare"
+      ]
+    },
+    "holder": {
+      "$ref": "common.json#/$defs/uri"
+    },
+    "allocated_at": {
+      "$ref": "common.json#/$defs/timestamp"
+    },
+    "expires_at": {
+      "description": "After this moment, unused serial numbers of the block are invalid (Section 7, rule 4).",
+      "$ref": "common.json#/$defs/timestamp"
+    },
+    "prev_closure": {
+      "description": "Required from the second block onward (Section 7, rule 3). For the first block the field is OMITTED, not set to null: an absent field and null are different documents (Section 3).",
+      "$ref": "common.json#/$defs/multihash"
+    },
+    "signatures": {
+      "$ref": "common.json#/$defs/signatures"
+    }
+  },
+  "required": [
+    "@context",
+    "type",
+    "v",
+    "emission",
+    "block",
+    "class",
+    "holder",
+    "allocated_at",
+    "expires_at",
+    "signatures"
+  ],
+  "additionalProperties": false
+}

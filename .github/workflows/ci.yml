@@ -1,0 +1,50 @@
+name: ci
+# Only by hand ([decision] 06.10), as the root workflow: no run per push.
+on:
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+# The CI of the separate core v2 repository, where this directory is the root
+# (`git subtree split --prefix=core-v2`). Inside the main repository GitHub
+# does not read it — there the root `.github/workflows/ci.yml` runs the same
+# steps from `core-v2/`. Keep the two in step.
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Owner's rule of 11.09: no Cyrillic in code or paths. The main
+      # repository runs `scripts/check_no_cyrillic.py`; here the same check
+      # without the script.
+      - name: no Cyrillic in code and paths
+        shell: python3 {0}
+        run: |
+          import re, subprocess, sys
+          cyr = re.compile("[\u0400-\u04FF]")
+          bad = []
+          for path in subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.splitlines():
+              if cyr.search(path):
+                  bad.append(path)
+                  continue
+              if path.endswith(".lock"):
+                  continue
+              try:
+                  text = open(path, encoding="utf-8").read()
+              except (UnicodeDecodeError, IsADirectoryError):
+                  continue
+              for n, line in enumerate(text.splitlines(), 1):
+                  if cyr.search(line):
+                      bad.append(f"{path}:{n}")
+          print("\n".join(bad))
+          sys.exit(1 if bad else 0)
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+      - run: cargo test --workspace
+      # Sh-12 of the Shamir audit: the field arithmetic compiles branch-free.
+      - run: scripts/check_ct_gf.sh
+      - name: generator determinism
+        run: |
+          cargo run -p ksg-vectors-v2
+          git diff --exit-code -- vectors/

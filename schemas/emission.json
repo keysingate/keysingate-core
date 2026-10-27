@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/emission.json",
+  "title": "Emission - a signed declaration of a range of serial numbers (Section 5)",
+  "description": "Printing the whole range costs one signature. Forms are derived from the emission deterministically and do not exist as separate documents.",
+  "type": "object",
+  "properties": {
+    "@context": {
+      "$ref": "common.json#/$defs/context"
+    },
+    "type": {
+      "const": "Emission"
+    },
+    "v": {
+      "$ref": "common.json#/$defs/version"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^ksg:em:[0-9]+$"
+    },
+    "range": {
+      "$ref": "common.json#/$defs/range"
+    },
+    "block_ttl_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "issuer": {
+      "$ref": "common.json#/$defs/uri"
+    },
+    "issued_at": {
+      "description": "Provides the lower time bound for any act on a form of this emission (Section 6).",
+      "$ref": "common.json#/$defs/timestamp"
+    },
+    "keys": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "common.json#/$defs/key"
+      }
+    },
+    "signatures": {
+      "$ref": "common.json#/$defs/signatures"
+    }
+  },
+  "required": [
+    "@context",
+    "type",
+    "v",
+    "id",
+    "range",
+    "block_ttl_days",
+    "issuer",
+    "issued_at",
+    "keys",
+    "signatures"
+  ],
+  "additionalProperties": false
+}

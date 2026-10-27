@@ -1,0 +1,21 @@
+# gitleaks config for the public core-v2 tree.
+#
+# Default rules are on. The only thing allowed below is test fixture data:
+# the deterministic base58 keys of the demo vectors (`vectors/*.json`), the same
+# kind of key inside the CLI's own test (`crates/ksg-cli-v2/tests/cli.rs`), and
+# one prose mention of the cipher name `XChaCha20-Poly1305` in a doc comment of
+# `crates/ksg-cli-v2/src/issue_label.rs`. test fixture, not a secret.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "test fixture, not a secret: demo vectors and the CLI test key"
+paths = [
+  '''vectors/''',
+  '''crates/ksg-cli-v2/tests/cli.rs''',
+]
+
+[[allowlists]]
+description = "test fixture, not a secret: cipher name in a doc comment"
+regexTarget = "match"
+regexes = ['''XChaCha20-Poly1305''']

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/common.json",
+  "title": "Shared definitions for the Keysingate core",
+  "$defs": {
+    "uri": {
+      "description": "Opaque identifier (Section 4.2). The core neither knows nor checks who issued it.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:"
+    },
+    "multihash": {
+      "description": "SHA-256 as a multihash with the 1220 prefix (Section 4).",
+      "type": "string",
+      "pattern": "^1220[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "description": "Core v2 section 3: UTC with exactly three digits of milliseconds, always. One form per instant, so the verifier compares parsed milliseconds and never a free-form string.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "base64url": {
+      "description": "base64url without padding.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "alg": {
+      "description": "Ed25519 is required; ML-DSA-65 is optional. A value outside the enumeration is rejected (Section 4.1), not skipped.",
+      "enum": [
+        "Ed25519",
+        "ML-DSA-65"
+      ]
+    },
+    "serial": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "range": {
+      "description": "A contiguous range of serial numbers; both bounds inclusive.",
+      "type": "object",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/serial"
+        },
+        "to": {
+          "$ref": "#/$defs/serial"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "key": {
+      "type": "object",
+      "properties": {
+        "kid": {
+          "$ref": "#/$defs/uri"
+        },
+        "alg": {
+          "$ref": "#/$defs/alg"
+        },
+        "key": {
+          "$ref": "#/$defs/base64url"
+        }
+      },
+      "required": [
+        "kid",
+        "alg",
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    "signature": {
+      "type": "object",
+      "properties": {
+        "kid": {
+          "$ref": "#/$defs/uri"
+        },
+        "alg": {
+          "$ref": "#/$defs/alg"
+        },
+        "value": {
+          "$ref": "#/$defs/base64url"
+        }
+      },
+      "required": [
+        "kid",
+        "alg",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "signatures": {
+      "description": "An array of independent signatures, NOT a concatenated string (Section 4.1). An array by construction: a second algorithm is added, it does not replace the first. At most 8 per document (core v2 section 14).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/signature"
+      },
+      "maxItems": 8
+    },
+    "version": {
+      "description": "Core major version. Core v2 reads exactly v=3; earlier documents are verified by core v1, which is kept (architecture v0.3 section 5.3).",
+      "type": "integer",
+      "const": 3,
+      "maximum": 9007199254740991
+    },
+    "context": {
+      "description": "Core v2 section 5: every signed structure names its context. One value per major version.",
+      "const": "urn:keysingate:core:v3"
+    },
+    "safe_uint": {
+      "description": "Core v2 section 3: integers only, 0 to 2^53-1, so that JCS gives the same bytes in every language.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  }
+}

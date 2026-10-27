@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/key-inclusion.json",
+  "title": "KeyInclusion - a key laid on top of the previous one (KS-1)",
+  "description": "An agent key is never replaced; a new key is laid on top of the previous one, and every key in the set stays valid. The linkage is a chain, joined by the predecessor hash and walked one link at a time; the result is a set of simultaneously valid keys. The words succession, inheritance, rotation and replacement are wrong here: an act signed by the first key stays valid when the set already holds many more. Introduced in core version 2.",
+  "type": "object",
+  "properties": {
+    "@context": {
+      "$ref": "common.json#/$defs/context"
+    },
+    "type": {
+      "const": "KeyInclusion"
+    },
+    "v": {
+      "$ref": "common.json#/$defs/version"
+    },
+    "emission": {
+      "type": "string",
+      "pattern": "^ksg:em:[0-9]+$"
+    },
+    "block": {
+      "$ref": "common.json#/$defs/range"
+    },
+    "predecessor": {
+      "description": "The hash of the previous link: the AgentBinding for the first inclusion, the previous KeyInclusion after that. A hash rather than a kid, because the hash pins the whole previous link - its key, its offset and its signatures - while a reference by name would leave the rest of the link substitutable without breaking the chain.",
+      "$ref": "common.json#/$defs/multihash"
+    },
+    "key": {
+      "$ref": "common.json#/$defs/key"
+    },
+    "offset_ms": {
+      "description": "Milliseconds since the container's genesis. Not a timestamp and MUST NOT be displayed as a date: without anchors it does not convert to absolute time at all. Its force comes from being bracketed between two anchors.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "signatures": {
+      "description": "Signed by the key of the PREVIOUS link, not by the key being added: a signature by the key being added would prove nothing, since whoever generated it a second ago holds it.",
+      "$ref": "common.json#/$defs/signatures"
+    }
+  },
+  "required": [
+    "@context",
+    "type",
+    "v",
+    "emission",
+    "block",
+    "predecessor",
+    "key",
+    "offset_ms",
+    "signatures"
+  ],
+  "additionalProperties": false
+}

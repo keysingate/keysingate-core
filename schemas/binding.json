@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/binding.json",
+  "title": "AgentBinding - a one-time binding of a block to an agent key (Section 8)",
+  "description": "A block has EXACTLY ONE binding; a second one is invalid - this makes the block non-reincarnatable and a stolen form useless. Uniqueness cannot be derived from a single document and is checked separately. agent.key proves continuity, not identity: anyone can generate a key.",
+  "type": "object",
+  "properties": {
+    "@context": {
+      "$ref": "common.json#/$defs/context"
+    },
+    "type": {
+      "const": "AgentBinding"
+    },
+    "v": {
+      "$ref": "common.json#/$defs/version"
+    },
+    "emission": {
+      "type": "string",
+      "pattern": "^ksg:em:[0-9]+$"
+    },
+    "block": {
+      "$ref": "common.json#/$defs/range"
+    },
+    "agent": {
+      "$ref": "common.json#/$defs/key"
+    },
+    "bound_at": {
+      "$ref": "common.json#/$defs/timestamp"
+    },
+    "signatures": {
+      "description": "Signed by the agent itself: no contact with the issuer is required at binding time.",
+      "$ref": "common.json#/$defs/signatures"
+    }
+  },
+  "required": [
+    "@context",
+    "type",
+    "v",
+    "emission",
+    "block",
+    "agent",
+    "bound_at",
+    "signatures"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,89 @@
+{
+  "set": "02_time",
+  "spec": "core v2 §5: exactly YYYY-MM-DDTHH:MM:SS.mmmZ; compared as milliseconds",
+  "cases": [
+    {
+      "input": "1970-01-01T00:00:00.000Z",
+      "verdict": "accept",
+      "unix_ms": 0
+    },
+    {
+      "input": "2026-08-27T00:00:00.000Z",
+      "verdict": "accept",
+      "unix_ms": 1787788800000
+    },
+    {
+      "input": "2026-08-27T00:00:00.500Z",
+      "verdict": "accept",
+      "unix_ms": 1787788800500
+    },
+    {
+      "input": "2024-02-29T23:59:59.999Z",
+      "verdict": "accept",
+      "unix_ms": 1709251199999
+    },
+    {
+      "input": "9999-12-31T23:59:59.999Z",
+      "verdict": "accept",
+      "unix_ms": 253402300799999
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "2026-08-27T00:00:00Z"
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "2026-08-27T00:00:00.5Z"
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "2026-08-27T00:00:00.5000Z"
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "2026-08-27T03:00:00.000+03:00"
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "2026-08-27 00:00:00.000Z"
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "2025-02-29T00:00:00.000Z"
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "2026-04-31T00:00:00.000Z"
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "2026-08-27T24:00:00.000Z"
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "2026-08-27T23:59:60.000Z"
+    },
+    {
+      "verdict": "reject",
+      "reason": "schema: Timestamp: not YYYY-MM-DDTHH:MM:SS.mmmZ",
+      "input": "1969-12-31T23:59:59.999Z"
+    }
+  ],
+  "order": [
+    {
+      "earlier": "2026-08-27T00:00:00.500Z",
+      "later": "2026-08-27T00:00:01.000Z",
+      "earlier_ms": 1787788800500,
+      "later_ms": 1787788801000
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/delegation.json",
+  "title": "Delegation - the right to issue inside a range (KS-4)",
+  "description": "Grants a delegate the right to allocate packets within a range nested in the grantor's. One type serves two cases that are the same act: a distributor issuing inside a range it was granted, and the issuer's own second key. The latter is the degenerate case where the delegate is the same party - a root key that is offline and rare signs releases and delegations, and an operational key that is online and rotatable signs packets, so that the key which signs often is not the key that must never leak. BlockAllocation is unchanged by this: it already takes an arbitrary key set, so sub-issuance verifies through the same code once the verifier is told whose keys to accept. Verification itself is not delegated - the chain is a set of documents, and whoever holds them gets the same answer. Introduced in core version 2.",
+  "type": "object",
+  "properties": {
+    "@context": {
+      "$ref": "common.json#/$defs/context"
+    },
+    "type": {
+      "const": "Delegation"
+    },
+    "v": {
+      "$ref": "common.json#/$defs/version"
+    },
+    "emission": {
+      "type": "string",
+      "pattern": "^ksg:em:[0-9]+$"
+    },
+    "range": {
+      "description": "The range the delegate may issue within. Nested in the grantor's range - the emission's at depth 0, the parent delegation's below that. Without the nesting a delegate issues serials its grantor never held.",
+      "$ref": "common.json#/$defs/range"
+    },
+    "delegate": {
+      "description": "Who the delegate is - an opaque URI, as the holder of an allocation is.",
+      "$ref": "common.json#/$defs/uri"
+    },
+    "keys": {
+      "description": "The keys the delegate will sign allocations with. A list, so the delegate can hold more than one and rotate within a grant; replacing the grant itself is what needs the grantor's key, and that is the rare event the two-tier split exists to make rare.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "common.json#/$defs/key"
+      }
+    },
+    "parent": {
+      "description": "The hash of the delegation above this one. Absent at depth 0, where the grantor is the emission's issuer, and required below it. Depth and parent must agree: a depth-0 link carrying a parent claims two grantors, and a deeper one without a parent claims none.",
+      "$ref": "common.json#/$defs/multihash"
+    },
+    "depth": {
+      "description": "How far down the chain this link sits. 0 is granted by the issuer itself. The limit of 4 is the channel depth: distributor, general agent, regional or sectoral agent, local or individual agent. It gives the set of parties trusted by construction a ceiling rather than leaving it to grow with the chain.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "delegated_at": {
+      "description": "When the grant was made. Never earlier than the grant it comes from.",
+      "$ref": "common.json#/$defs/timestamp"
+    },
+    "term_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "How long the grant runs, in milliseconds. Stated in the document so the bound can be checked without a calendar; a verifier that has one checks it against delegated_at and expires_at.",
+      "maximum": 9007199254740991
+    },
+    "expires_at": {
+      "description": "When the grant ends. Not optional: a grant without an end cannot be rotated away without a revocation mechanism, so a leaked operational key would stay valid forever - which is what splitting the key was meant to prevent. It may never outlive the grant it comes from, or the chain above would end while the leaf went on issuing.",
+      "$ref": "common.json#/$defs/timestamp"
+    },
+    "signatures": {
+      "description": "The grantor's signature: the issuer's at depth 0, the parent delegation's keys below that.",
+      "$ref": "common.json#/$defs/signatures"
+    }
+  },
+  "required": [
+    "@context",
+    "type",
+    "v",
+    "emission",
+    "range",
+    "delegate",
+    "keys",
+    "depth",
+    "delegated_at",
+    "term_ms",
+    "expires_at",
+    "signatures"
+  ],
+  "additionalProperties": false
+}

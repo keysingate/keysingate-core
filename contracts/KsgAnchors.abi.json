@@ -1,0 +1,209 @@
+[
+ {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "writer",
+    "type": "address"
+   }
+  ],
+  "name": "NotWriter",
+  "type": "error"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "head",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "presented",
+    "type": "bytes32"
+   }
+  ],
+  "name": "StalePredecessor",
+  "type": "error"
+ },
+ {
+  "inputs": [],
+  "name": "ZeroAnchor",
+  "type": "error"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "bytes32",
+    "name": "container",
+    "type": "bytes32"
+   },
+   {
+    "indexed": false,
+    "internalType": "bytes32",
+    "name": "prev",
+    "type": "bytes32"
+   },
+   {
+    "indexed": false,
+    "internalType": "bytes32",
+    "name": "next",
+    "type": "bytes32"
+   },
+   {
+    "indexed": false,
+    "internalType": "uint64",
+    "name": "count",
+    "type": "uint64"
+   },
+   {
+    "indexed": false,
+    "internalType": "address",
+    "name": "writer",
+    "type": "address"
+   }
+  ],
+  "name": "Anchored",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "bytes32",
+    "name": "container",
+    "type": "bytes32"
+   },
+   {
+    "indexed": false,
+    "internalType": "address",
+    "name": "from",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   }
+  ],
+  "name": "HandedOver",
+  "type": "event"
+ },
+ {
+  "anonymous": false,
+  "inputs": [
+   {
+    "indexed": true,
+    "internalType": "bytes32",
+    "name": "kind",
+    "type": "bytes32"
+   },
+   {
+    "indexed": true,
+    "internalType": "address",
+    "name": "sender",
+    "type": "address"
+   },
+   {
+    "indexed": false,
+    "internalType": "bytes",
+    "name": "data",
+    "type": "bytes"
+   }
+  ],
+  "name": "Noted",
+  "type": "event"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "container",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "prev",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "next",
+    "type": "bytes32"
+   }
+  ],
+  "name": "anchor",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "container",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "address",
+    "name": "to",
+    "type": "address"
+   }
+  ],
+  "name": "handOver",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "container",
+    "type": "bytes32"
+   }
+  ],
+  "name": "head",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "last",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "address",
+    "name": "writer",
+    "type": "address"
+   },
+   {
+    "internalType": "uint64",
+    "name": "count",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "kind",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes",
+    "name": "data",
+    "type": "bytes"
+   }
+  ],
+  "name": "note",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ }
+]

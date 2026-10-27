@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.keysingate.com/core/v2/container-init.json",
+  "title": "ContainerInit - the birth of a container and its personal identifier (KS-8)",
+  "description": "The client agent's key and the artifact are bound at one and the same moment; before it there is a template and rights, after it there is a container. The serial is a position in the release, known before the container exists; the container identifier is the container's identity, coming into being here. The identifier is derived from the act of initiation rather than assigned: it therefore cannot be handed out twice, and no registry of issued identifiers - and no party to trust with one - is needed. Introduced in core version 2.",
+  "type": "object",
+  "properties": {
+    "@context": {
+      "$ref": "common.json#/$defs/context"
+    },
+    "type": {
+      "const": "ContainerInit"
+    },
+    "v": {
+      "$ref": "common.json#/$defs/version"
+    },
+    "emission": {
+      "type": "string",
+      "pattern": "^ksg:em:[0-9]+$"
+    },
+    "serial": {
+      "description": "The position in the release, not the identity. Handed out by the issuer in order and known before the container exists.",
+      "$ref": "common.json#/$defs/serial"
+    },
+    "binding": {
+      "description": "The hash of the packet's AgentBinding.",
+      "$ref": "common.json#/$defs/multihash"
+    },
+    "agent": {
+      "description": "The client agent's key. Initiation is the moment it is laid on.",
+      "$ref": "common.json#/$defs/key"
+    },
+    "artifact": {
+      "description": "The artifact bound at the same moment as the key.",
+      "$ref": "common.json#/$defs/uri"
+    },
+    "offset_ms": {
+      "description": "Milliseconds since the PACKET's genesis, not the container's. The origin is one per packet: every container of a packet inherits the moment of purchase.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "container": {
+      "description": "The personal identifier. DERIVED, never assigned: a function of the emission, the serial, the agent key, the artifact and the offset, under a domain separator. A verifier recomputes it rather than trusting it, which is what makes it evidence instead of a claim.",
+      "$ref": "common.json#/$defs/multihash"
+    },
+    "signatures": {
+      "description": "Two signatures - the client agent's and the owner's or orchestrator's - arriving in one command and checked together. A sequential pair would leave a window in which the first waits for the second and can be held or replayed.",
+      "$ref": "common.json#/$defs/signatures"
+    }
+  },
+  "required": [
+    "@context",
+    "type",
+    "v",
+    "emission",
+    "serial",
+    "binding",
+    "agent",
+    "artifact",
+    "offset_ms",
+    "container",
+    "signatures"
+  ],
+  "additionalProperties": false
+}

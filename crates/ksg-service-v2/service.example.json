@@ -1,0 +1,18 @@
+{
+  "listen": "127.0.0.1:8640",
+  "audience": "https://desk.keysingate.example/v1",
+  "state": "/var/lib/ksg-service",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "issuer_keys": "/etc/ksg-service/issuer-keys.json",
+  "max_standing_age_s": 86400,
+  "legal_checkers": [],
+  "holders": [
+    {
+      "id": "holder-1",
+      "key": {"kid": "did:key:zHolder1#k1", "alg": "Ed25519", "key": "<the holder's Ed25519 public key, base64url>"},
+      "payer": "/etc/ksg-service/payers/holder-1.json"
+    }
+  ],
+  "workers": 4
+}

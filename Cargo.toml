@@ -1,0 +1,47 @@
+# Keysingate core, version 2 — a workspace of its own.
+#
+# `[decision]` 30.09: the second version of the core shares nothing with the
+# first: no crate, no path, no lock file. Core v1 (archived on 01.10:
+# tag `core-v1-final`, LEGACY.md) verifies documents of major versions 1 and 2; this one issues and
+# verifies major version 3 (`[doc:CORE-V2-SPEC]`).
+[workspace]
+resolver = "2"
+members  = ["crates/ksg-core-v2", "crates/ksg-vectors-v2", "crates/ksg-container-v2", "crates/ksg-verify-v2", "crates/ksg-anchor-v2", "crates/ksg-issuer-v2", "crates/ksg-cli-v2", "crates/ksg-service-v2", "crates/ksg-mobile-v2", "crates/ksg-custody-v2", "crates/ksg-custody-proc-v2", "crates/ksg-pay-v2", "crates/ksg-web-v2", "crates/ksg-capsule-module", "crates/ksg-capsule-reader"]
+
+[workspace.package]
+version      = "2.0.0-alpha.1"
+edition      = "2021"
+rust-version = "1.81"
+license      = "Apache-2.0"
+repository   = "https://github.com/keysingate/keysingate-core"
+
+[workspace.dependencies]
+serde       = { version = "1", features = ["derive"] }
+serde_json  = { version = "1", features = ["preserve_order"] }
+sha2        = "0.10"
+ed25519-dalek = "2"
+base64       = "0.22"
+thiserror    = "2"
+serde_json_canonicalizer = "0.3"
+hex          = "0.4"
+fips204      = { version = "0.4.6", default-features = false, features = ["ml-dsa-65", "default-rng"] }
+trybuild     = "1"
+jsonschema   = { version = "0.52", default-features = false }
+# Property tests (gap 13.10: mutations, property tests, fuzzing — run 1 of 2–3).
+proptest     = { version = "=1.12.0", default-features = false, features = ["std"] }
+# Outside the core, for the container (ksg-container-v2): the layer key, the
+# client's split key, wiping key material. Same versions as core v1's
+# workspace, chosen independently here — the two lock files do not meet.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+x25519-dalek = { version = "2", default-features = false, features = ["static_secrets"] }
+hkdf         = "0.12"
+fips203      = { version = "0.4.3", default-features = false, features = ["ml-kem-768"] }
+frost-ed25519 = { version = "3", default-features = false, features = ["serialization"] }
+zeroize      = { version = "1", default-features = false, features = ["alloc", "zeroize_derive"] }
+
+# Goal 1, step G1-3 (owner's decision 09.10): third-party crates and crypto
+# build optimized even under `cargo test`. Our own code stays unoptimized, so
+# debugging does not suffer; the slow test files (service, devnet, channel,
+# cli, store, journal) spend their time in dependencies.
+[profile.dev.package."*"]
+opt-level = 3
