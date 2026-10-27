@@ -375,6 +375,9 @@ fn main() -> ExitCode {
             container,
             class,
             keys,
+            // The product's rule (Г-1): an agent is named by the `did:key` of
+            // the key it signs under.
+            client_id_from_key: true,
             anchors,
         },
     );

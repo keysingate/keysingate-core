@@ -234,12 +234,16 @@ pub mod kid {
     pub const BUYER: &str = "did:key:zKsgBuyer#k1";
     /// The issuer's seal.
     pub const SEAL: &str = "did:key:zKsgSeal#k1";
-    /// The client.
-    pub const CLIENT: &str = "did:key:zKsgClient#k1";
+    /// The name a client's key carries until it is born (Г-1).
+    ///
+    /// A birth names its key by the `did:key` of the group key, and that key
+    /// exists only when the birth is done — before it there is nothing to
+    /// compute a name from. So a key in the making, and a capsule sealed
+    /// before initiation, carry this instead. It is never signed: the first
+    /// signature under the key is made after the name is given.
+    pub const UNBORN: &str = "urn:ksg:client:unborn#keygen";
     /// The container's own post-quantum key (CH-5b).
     pub const CONTAINER_PQ: &str = "did:key:zKsgContainer#pq";
-    /// Who writes the journal's pages.
-    pub const AUTHOR: &str = "did:key:zKsgClient";
 }
 
 /// The owner's seed, for keys expanded from it under labels of their own

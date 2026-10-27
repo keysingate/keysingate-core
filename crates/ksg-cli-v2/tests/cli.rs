@@ -213,6 +213,7 @@ fn verdict(d: &Dir, home: &Path, export: &Path, class: Class) -> ksg_verify_v2::
             container: id(home),
             class,
             keys,
+            client_id_from_key: true,
             anchors: &NoReader,
         },
     )
@@ -452,6 +453,7 @@ fn a_container_is_handed_to_another_agent() {
             container: id(&home),
             class: Class::Light,
             keys: keys_from_json(&std::fs::read(d.p("keys.json")).unwrap()).unwrap(),
+            client_id_from_key: true,
             anchors: &NoReader,
         },
     );

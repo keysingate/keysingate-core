@@ -119,6 +119,112 @@ pub enum CapsuleError {
 /// client's and the owner's after. Bounds the reader's probing.
 pub const MAX_MAPS: usize = 3;
 
+/// The `SharedSecrets` part: what both maps must read to carry the capsule on.
+///
+/// Public because the reader seals the first capsule (`init`) before any
+/// session opens it, and the module reads it back (`Spec_kapsula` §10 п. 3).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Shared {
+    /// Version of this layout.
+    pub v: u32,
+    /// The key the container's state is sealed under, base64url (32 bytes).
+    pub state_key: String,
+    /// The container's template identifier, as a multihash.
+    pub template: String,
+    /// The artefact the container was initiated on.
+    pub artifact: String,
+    /// The client's key identifier, for the birth (E-4).
+    pub client: String,
+    /// The wall clock of the issuance, milliseconds since the Unix epoch:
+    /// the offsets in the journal run from it.
+    pub issued_ms: u64,
+    /// The greatest offset already used: offsets grow strictly, even when the
+    /// wall clock does not.
+    pub clock_ms: u64,
+    /// Every map the capsule seals to, in slot order (§10 п. 2).
+    pub maps: Vec<MapPub>,
+}
+
+/// One map's public halves, enough to re-seal its slot.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MapPub {
+    /// `holder`, `client` or `owner`.
+    pub role: String,
+    /// The X25519 public half, base64url (32 bytes).
+    pub x25519: String,
+    /// The ML-KEM-768 encapsulation key, base64url.
+    pub mlkem: String,
+}
+
+/// Seals a container's state into a capsule: the shared secrets part, the
+/// code, the state, and the parts the map does not rewrite.
+///
+/// This is the one place a capsule is built — the reader's `init` (no session
+/// yet), and a session's close (`Spec_kapsula` §10 п. 3, §4).
+///
+/// # Errors
+///
+/// [`CapsuleError::TooLarge`], [`CapsuleError::NoSlot`], or a sealing failure.
+#[allow(clippy::too_many_arguments)]
+pub fn seal_into_capsule(
+    state: &[u8],
+    state_key: &[u8; 32],
+    template: &str,
+    artifact: &str,
+    client: &str,
+    issued_ms: u64,
+    clock_ms: u64,
+    code: &[u8],
+    parts: &[Part],
+    maps: &[(MapRole, SealTo)],
+    random: &mut dyn FnMut(&mut [u8]),
+) -> Result<Vec<u8>, CapsuleError> {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
+    use base64::Engine as _;
+    let shared = Shared {
+        v: 1,
+        state_key: B64.encode(state_key),
+        template: template.to_string(),
+        artifact: artifact.to_string(),
+        client: client.to_string(),
+        issued_ms,
+        clock_ms,
+        maps: maps
+            .iter()
+            .map(|(role, map)| MapPub {
+                role: role_name(*role).to_string(),
+                x25519: B64.encode(map.public().as_bytes()),
+                mlkem: B64.encode(map.mlkem()),
+            })
+            .collect(),
+    };
+    let shared = serde_json::to_vec(&shared).map_err(|_| CapsuleError::Tampered)?;
+    let mut all = parts.to_vec();
+    all.push(Part {
+        kind: PartKind::Code,
+        bytes: code.to_vec(),
+    });
+    all.push(Part {
+        kind: PartKind::State,
+        bytes: state.to_vec(),
+    });
+    all.push(Part {
+        kind: PartKind::SharedSecrets,
+        bytes: shared,
+    });
+    assemble(&all, maps, random)
+}
+
+/// A map's role, as [`Shared`] spells it.
+#[must_use]
+pub const fn role_name(role: MapRole) -> &'static str {
+    match role {
+        MapRole::Holder => "holder",
+        MapRole::Client => "client",
+        MapRole::Owner => "owner",
+    }
+}
+
 const SLOT_INFO: &[u8] = b"ksg:capsule:slot:v1";
 const SLOT_AAD: &[u8] = b"ksg:capsule:slot-payload:v1";
 const PART_AAD: &[u8] = b"ksg:capsule:part:v1";

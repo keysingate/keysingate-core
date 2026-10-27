@@ -253,6 +253,7 @@ fn a_heavy_life_anchored_on_devnet_verifies() {
             container: id(&home),
             class: Class::Heavy,
             keys: keys.clone(),
+            client_id_from_key: true,
             anchors: &blind,
         },
     );
@@ -264,6 +265,7 @@ fn a_heavy_life_anchored_on_devnet_verifies() {
         container: id(&home),
         class: Class::Heavy,
         keys,
+        client_id_from_key: true,
         anchors: &reader,
     };
     let fin = verify_bytes(&std::fs::read(d.p("final.json")).unwrap(), &exp);
@@ -284,6 +286,7 @@ fn a_heavy_life_anchored_on_devnet_verifies() {
             container: id(&home),
             class: Class::Heavy,
             keys: issuer.clone(),
+            client_id_from_key: false,
             anchors: &blind,
         },
     );
@@ -691,6 +694,7 @@ fn a_light_container_anchors_from_the_move_to_pro() {
             container: id(&home),
             class: Class::Light,
             keys: keys_from_json(&std::fs::read(d.p("keys.json")).unwrap()).unwrap(),
+            client_id_from_key: true,
             anchors: &reader,
         },
     );
@@ -754,6 +758,7 @@ fn a_handoff_in_pro_is_anchored() {
             container: id(&home),
             class: Class::Heavy,
             keys: keys_from_json(&std::fs::read(d.p("keys.json")).unwrap()).unwrap(),
+            client_id_from_key: true,
             anchors: &reader,
         },
     );
@@ -848,6 +853,7 @@ fn a_memo_late_to_finalize_is_taken_not_sent_again() {
             container: id(&home),
             class: Class::Heavy,
             keys: keys_from_json(&std::fs::read(d.p("keys.json")).unwrap()).unwrap(),
+            client_id_from_key: true,
             anchors: &reader,
         },
     );
@@ -1080,6 +1086,7 @@ fn the_scan_key_changes_by_period_and_one_period_reads_only_its_own() {
                 container: id(&home),
                 class: Class::Heavy,
                 keys: keys_from_json(&std::fs::read(d.p("keys.json")).unwrap()).unwrap(),
+                client_id_from_key: true,
                 anchors: &reader,
             },
         )
@@ -1275,6 +1282,7 @@ fn a_heavy_life_anchored_on_localnet_verifies() {
         container: id(&home),
         class: Class::Heavy,
         keys: keys.clone(),
+        client_id_from_key: true,
         anchors: &reader,
     };
     let fin = verify_bytes(&std::fs::read(d.p("final.json")).unwrap(), &exp);
@@ -1289,6 +1297,7 @@ fn a_heavy_life_anchored_on_localnet_verifies() {
             container: id(&home),
             class: Class::Heavy,
             keys,
+            client_id_from_key: true,
             anchors: &blind,
         },
     );

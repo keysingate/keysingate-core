@@ -938,6 +938,23 @@ impl Container {
         self.round = None;
     }
 
+    /// Names the key being born, once the group key is known: at initiation
+    /// the client's identifier is the `did:key` of that key (Г-1), and the
+    /// group key exists only when both rounds of the birth are done. Nothing
+    /// has been signed under the key yet, so the name is not a change of a
+    /// claim, it is the claim.
+    ///
+    /// # Errors
+    ///
+    /// [`Stopped::Birth`] when no keygen is open.
+    pub fn name_birth(&mut self, kid: Uri) -> Result<(), Stopped> {
+        let Some(keygen) = self.keygen.as_mut() else {
+            return Err(Stopped::Birth("no keygen open"));
+        };
+        keygen.set_kid(kid);
+        Ok(())
+    }
+
     /// The client's key born for initiation, if any: what the initiation's
     /// command is signed under.
     #[must_use]

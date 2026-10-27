@@ -276,6 +276,8 @@ fn issuer_distributor_agent_enterprise_container_verified_alone() {
             container: id(&home),
             class: r.class,
             keys: client_keys(&d),
+            // Г-1: the reader names the client by the `did:key` of its key.
+            client_id_from_key: true,
             anchors: &NoReader,
         },
     );
@@ -724,6 +726,7 @@ fn a_heavy_container_of_the_channel_anchored_on_devnet() {
             container: id(&home),
             class: r.class,
             keys: client_keys(&d),
+            client_id_from_key: true,
             anchors: &reader,
         },
     );
@@ -1953,4 +1956,161 @@ fn a_seat_checks_its_signature_and_the_containers_issuer() {
     assert!(check_seat(&seat, &sale, &stranger)
         .unwrap_err()
         .contains("not of this container's issuer"));
+}
+
+/// Г-1: one receiver of a packet, the whole way — printed on a serial of the
+/// sale, the client's key born at initiation, the journal opened, the export
+/// out, and the client's keys as a verifier reads them.
+fn receiver_life(d: &Dir) -> (String, KeySet) {
+    issuer_and_distributor(d);
+    agent(d, "dist", "AgentB", "50000");
+    let home = d.p("box");
+    ok(&[
+        "distributor",
+        "sell",
+        "--desk",
+        &d.p("AgentB"),
+        "--to",
+        &holder(d, "box"),
+        "--class",
+        "light",
+        "--size",
+        "10000",
+        "--out",
+        &d.p("sale.json"),
+    ]);
+    let half = d.p("m.half");
+    ok(&[
+        "--home",
+        &home,
+        "init",
+        "--sale",
+        &d.p("sale.json"),
+        "--issuer-desk",
+        &d.p("issuer"),
+        "--serial",
+        "7",
+    ]);
+    ok(&["--home", &home, "packet"]);
+    ok(&["--home", &home, "buyer-key"]);
+    ok(&["--home", &home, "--mobile", &half, "initiate"]);
+    ok(&["--home", &home, "--mobile", &half, "open-journal"]);
+    std::fs::write(d.p("policy.txt"), b"POLICY 1").unwrap();
+    ok(&[
+        "--home",
+        &home,
+        "--mobile",
+        &half,
+        "attach",
+        "--type",
+        "urn:ksg:page:policy:v1",
+        "--file",
+        &d.p("policy.txt"),
+    ]);
+    ok(&["--home", &home, "finalize"]);
+    ok(&[
+        "--home",
+        &home,
+        "--mobile",
+        &half,
+        "export-final",
+        "--out",
+        &d.p("export.json"),
+    ]);
+    ok(&["--home", &home, "keys", "--out", &d.p("keys.json")]);
+    (home, client_keys(d))
+}
+
+/// The one key of a client's key set.
+fn the_key(keys: &KeySet) -> &ksg_core_v2::crypto::sign::PublicKey {
+    assert_eq!(keys.keys().count(), 1, "a client has one key: the group key");
+    keys.keys().next().expect("one key")
+}
+
+/// Г-1: two receivers of `bare` do not share an identifier. The client's key
+/// is born at initiation, so what names the agent is not a constant of the
+/// program but the key itself.
+#[test]
+fn two_receivers_get_different_client_ids() {
+    let (first, second) = (Dir::new("g1one"), Dir::new("g1two"));
+    let (_, one) = receiver_life(&first);
+    let (_, two) = receiver_life(&second);
+    let (a, b) = (the_key(&one), the_key(&two));
+    assert_ne!(a.kid.as_str(), b.kid.as_str(), "two clients, two names");
+    assert_ne!(a.key, b.key, "two clients, two keys");
+    // Not the stand-in the program used before Г-1 either.
+    assert!(!a.kid.as_str().contains("zKsgClient"), "{}", a.kid);
+}
+
+/// Г-1: the client agent's identifier is the `did:key` of the group key its
+/// halves sign under — computed by the same code a verifier runs, so the
+/// pages and the export carry it without anyone's word.
+#[test]
+fn the_client_id_is_the_did_key_of_its_group_key() {
+    use ksg_core_v2::crypto::did_key;
+    let d = Dir::new("g1didkey");
+    let (home, keys) = receiver_life(&d);
+    let key = the_key(&keys);
+    let did = did_key::of_public(key).expect("an Ed25519 key has a did:key");
+    assert_eq!(key.kid.as_str(), format!("{did}#{}", did_key::FRAGMENT));
+    assert!(did.starts_with("did:key:z"), "{did}");
+
+    // The container's own record of its client agrees.
+    let meta: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(Path::new(&home).join("container.json")).unwrap())
+            .unwrap();
+    assert_eq!(meta["client"]["kid"], key.kid.as_str());
+
+    // And the export: the author of the pages, as a third party reads it.
+    let r = verify_bytes(
+        &std::fs::read(d.p("export.json")).unwrap(),
+        &Expected {
+            container: id(&home),
+            class: Class::Light,
+            keys,
+            client_id_from_key: true,
+            anchors: &NoReader,
+        },
+    );
+    assert!(r.accepted, "{r:?}");
+    assert_eq!(r.author.as_deref(), Some(did.as_str()));
+    assert_eq!(r.first_agent.as_deref(), Some(did.as_str()));
+}
+
+/// Г-1: an author's identifier substituted in the export — the keys left as
+/// they were — is refused: the name is the key, and another name is another
+/// agent's.
+#[test]
+fn a_substituted_author_id_in_the_export_is_refused() {
+    use ksg_core_v2::crypto::did_key;
+    let d = Dir::new("g1swap");
+    let (home, keys) = receiver_life(&d);
+    let bytes = std::fs::read(d.p("export.json")).unwrap();
+    let expected = |keys: KeySet| Expected {
+        container: id(&home),
+        class: Class::Light,
+        keys,
+        client_id_from_key: true,
+        anchors: &NoReader,
+    };
+    let honest = verify_bytes(&bytes, &expected(keys.clone()));
+    assert!(honest.accepted, "{honest:?}");
+
+    // Another key, named by its own `did:key`: a plausible author that is not
+    // this container's client.
+    let theirs = did_key::of_ed25519_b64(&ksg_core_v2::crypto::sign::b64_encode(&[7u8; 32]))
+        .expect("a did:key");
+    let mut forged: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let opening = forged["pages"][0]["body"]["opening"]["agent"]["id"].take();
+    assert_eq!(
+        opening.as_str(),
+        Some(the_key(&keys).kid.as_str().split('#').next().unwrap()),
+        "page 0 names the client"
+    );
+    forged["pages"][0]["body"]["opening"]["agent"]["id"] = theirs.clone().into();
+    let r = verify_bytes(&serde_json::to_vec(&forged).unwrap(), &expected(keys));
+    assert!(!r.accepted, "{r:?}");
+    let reason = r.reason.unwrap_or_default();
+    assert!(reason.contains("Г-1"), "{reason}");
+    assert!(reason.contains(&theirs), "{reason}");
 }

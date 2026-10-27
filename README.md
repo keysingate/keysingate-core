@@ -225,12 +225,13 @@ flowchart TB
 | The orchestrator hands the claim to the agent through an ACP-A2A gateway | [`scripts/demo_orchestrator.sh`](scripts/demo_orchestrator.sh) |
 | The container number paid with x402 through μ Gate — the agent never holds a wallet key | [`scripts/e2e_ksg_x402.sh`](scripts/e2e_ksg_x402.sh) |
 | Pro with anchors on a local Solana node | [`scripts/demo_pro_localnet.sh`](scripts/demo_pro_localnet.sh) |
+| The same chain on the capsule: print → initiation → three pages → export → ACCEPTED offline; a tampered page REJECTED | [`scripts/demo_pro_capsule.sh`](scripts/demo_pro_capsule.sh) |
 
 ### Built during the hackathon
 
 - [x] **The capsule** — one fixed-size 6 MiB file indistinguishable from noise; each party holds one secret file; parts are sealed to the parties' maps (X25519 + ML-KEM-768)
 - [x] Agent tools over MCP; the stand's demo chain
-- [ ] The container's code running inside the capsule (WebAssembly module + reader)
+- [x] The container's code running inside the capsule: the module in wasmtime behind the two imports, a session of open → call ×N → close, the `ksg-capsule` command line; the offline chain verifies (K5 offline). The Pro half — anchors read by the reader — is not wired into `ksg-capsule` yet
 - [ ] Muse Spark: every model call recorded as a page; image evidence through SAM 3.1; an explanation whose citations are checked against the verified pages
 
 <details>
@@ -294,7 +295,7 @@ A universal adapter runtime: local (stdio) and remote (HTTP / SSE / MCP / A2A / 
 ## ✅ Checks
 
 ```bash
-cargo test --workspace            # 959 tests
+cargo test --workspace            # 968 tests
 cargo clippy --workspace --all-targets
 scripts/test_split.sh cloud       # with cargo-nextest: the fast part
 scripts/test_split.sh hermes      # the three slow suites (cli, base, devnet)

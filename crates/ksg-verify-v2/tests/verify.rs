@@ -49,28 +49,40 @@ fn anchor(subject: Hash, proved: &str) -> Attestation {
 }
 
 /// The agent: Ed25519 and ML-DSA-65 from public seeds.
+///
+/// Г-1: the agent is named by the `did:key` of its Ed25519 key — the same
+/// string a verifier computes — and not by a label the stand made up.
 struct Agent {
     ed: Ed25519Signer,
     sk: ml_dsa_65::PrivateKey,
     pk: PublicKey,
+    id: Uri,
 }
 
 impl Agent {
-    fn new(name: &str, seed: u8) -> Self {
+    fn new(seed: u8) -> Self {
         let (pk, sk) = ml_dsa_65::KG::keygen_from_seed(&[seed; 32]);
+        let first = Ed25519Signer::from_seed(uri("urn:ksg:test:agent#ed"), [seed; 32]);
+        let did = ksg_core_v2::crypto::did_key::of_ed25519_b64(&first.public().key)
+            .expect("the key's own did:key");
+        let id = uri(&did);
         Self {
-            ed: Ed25519Signer::from_seed(uri(&format!("did:key:z{name}#ed")), [seed; 32]),
+            ed: Ed25519Signer::from_seed(
+                uri(&format!("{did}#{}", ksg_core_v2::crypto::did_key::FRAGMENT)),
+                [seed; 32],
+            ),
             sk,
             pk: PublicKey {
-                kid: uri(&format!("did:key:z{name}#pq")),
+                kid: uri(&format!("{did}#pq")),
                 alg: Alg::MlDsa65,
                 key: b64_encode(&pk.into_bytes()),
             },
+            id,
         }
     }
-    fn party(&self, name: &str) -> Party {
+    fn party(&self) -> Party {
         Party {
-            id: uri(&format!("did:key:z{name}")),
+            id: self.id.clone(),
             keys: vec![self.ed.public(), self.pk.clone()],
         }
     }
@@ -95,16 +107,16 @@ impl Agent {
 
 /// A journal of two records, in the form the class opens it in.
 fn journal(class: Class) -> (Binder, Agent) {
-    let agent = Agent::new("Agent", 31);
-    let owner = Agent::new("Owner", 32);
+    let agent = Agent::new(31);
+    let owner = Agent::new(32);
     let pro = class == Class::Heavy;
     let mode = if pro { Mode::Pro } else { Mode::Local };
     let p = Profile::default();
     let (bytes, hash) = Binder::opening_seal(
         container(),
         mode,
-        agent.party("Agent"),
-        owner.party("Owner"),
+        agent.party(),
+        owner.party(),
         1,
     )
     .expect("seal 0");
@@ -117,8 +129,8 @@ fn journal(class: Class) -> (Binder, Agent) {
     let mut b = Binder::open(
         container(),
         mode,
-        agent.party("Agent"),
-        owner.party("Owner"),
+        agent.party(),
+        owner.party(),
         1,
         &opening,
         &p,
@@ -163,6 +175,9 @@ fn expected(class: Class, keys: KeySet, anchors: &dyn AttestationVerifier) -> Ex
         container: container(),
         class,
         keys,
+        // Г-1, the product's rule: the agent is named by the `did:key` of its
+        // own key (the stand's keys are made that way).
+        client_id_from_key: true,
         anchors,
     }
 }
@@ -220,15 +235,34 @@ fn the_class_decides_the_form_and_another_container_is_refused() {
 #[test]
 fn keys_the_verifier_does_not_accept_are_refused() {
     let (bytes, _) = export_bytes(Class::Light);
-    let stranger = Agent::new("Stranger", 77);
+    let stranger = Agent::new(77);
     let r = verify_bytes(&bytes, &expected(Class::Light, stranger.keys(), &NoReader));
     assert!(!r.accepted);
     assert!(r.reason.unwrap().contains("does not accept"));
 }
 
+/// Г-1: the export names its author, and the name must be the `did:key` of
+/// the key the pages are signed with. Another name — the keys left as they
+/// were — is another agent's name, and the export is refused.
 #[test]
-fn one_page_is_verified_on_its_own_with_its_seals_bound() {
-    let (mut b, agent) = journal(Class::Heavy);
+fn an_author_named_by_another_key_is_refused() {
+    let (bytes, keys) = export_bytes(Class::Light);
+    let theirs =
+        ksg_core_v2::crypto::did_key::of_ed25519_b64(&b64_encode(&[9u8; 32])).expect("a did:key");
+    let mut v: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+    v["pages"][0]["body"]["opening"]["agent"]["id"] = theirs.clone().into();
+    let r = verify_bytes(
+        &serde_json::to_vec(&v).expect("json"),
+        &expected(Class::Light, keys, &NoReader),
+    );
+    assert!(!r.accepted, "{r:?}");
+    let reason = r.reason.unwrap_or_default();
+    assert!(reason.contains("Г-1"), "{reason}");
+    assert!(reason.contains(&theirs), "{reason}");
+}
+
+#[test]
+fn one_page_is_verified_on_its_own_with_its_seals_bound() {    let (mut b, agent) = journal(Class::Heavy);
     let point = b.export_one(1).expect("page 1");
     let bytes = serde_json::to_vec(&point).expect("json");
     let r = verify_bytes(&bytes, &expected(Class::Heavy, agent.keys(), &Net));
@@ -313,7 +347,7 @@ fn bytes_that_are_none_of_the_forms_are_refused() {
 
 #[test]
 fn keys_are_read_from_json_and_an_empty_set_is_refused() {
-    let agent = Agent::new("Agent", 31);
+    let agent = Agent::new(31);
     let json = serde_json::to_vec(&vec![agent.ed.public(), agent.pk.clone()]).unwrap();
     assert_eq!(keys_from_json(&json).unwrap().len(), 2);
     assert!(keys_from_json(b"[]").is_err());

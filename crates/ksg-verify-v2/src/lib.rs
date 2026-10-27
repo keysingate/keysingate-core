@@ -42,7 +42,7 @@ pub mod testkeys;
 
 use ksg_core_v2::anchor::{Attestation, AttestationVerifier};
 use ksg_core_v2::crypto::hash::Hash;
-use ksg_core_v2::crypto::sign::{KeySet, Profile, PublicKey};
+use ksg_core_v2::crypto::sign::{Alg, KeySet, Profile, PublicKey};
 use ksg_core_v2::doc::{Class, Timestamp, Uri};
 use ksg_core_v2::error::Invalid;
 use ksg_core_v2::journal::{
@@ -174,6 +174,13 @@ pub struct Expected<'a> {
     /// The accepted keys: the agent's for a journal, the issuer's for the
     /// status section.
     pub keys: KeySet,
+    /// Whether the agent's identifier must be the `did:key` of its own key
+    /// (Г-1): a key set whose names are stand-ins (`did:key:zAgent`) is then
+    /// refused, and a name borrowed from another key with it.
+    ///
+    /// `false` for the older test vectors and stands, where a `kid` is a name
+    /// and not a claim; a verifier that accepts a container's pages sets it.
+    pub client_id_from_key: bool,
     /// The reader of the anchoring network.
     pub anchors: &'a dyn AttestationVerifier,
 }
@@ -271,6 +278,9 @@ fn bound(x: &BoundExport, exp: &Expected<'_>, profile: &Profile) -> Report {
             k.kid.as_str()
         ));
     }
+    if let Err(e) = named_by_its_key(agent, exp) {
+        return no(e);
+    }
     if *mode != opening_form(exp.class) {
         return no(format!(
             "a {:?} container opens its journal {:?}, not {mode:?}",
@@ -331,9 +341,47 @@ fn bound(x: &BoundExport, exp: &Expected<'_>, profile: &Profile) -> Report {
     }
 }
 
+/// Г-1: the agent that signs the pages is named by the `did:key` of the key it
+/// signs under — the group key of its two halves, computed from the key
+/// itself, so that no registry and no trusted party is needed to tell one
+/// client agent from another.
+///
+/// A name that is not that string is refused: a `kid` is a name, and anyone
+/// can generate a key and call it `did:key:zClient`. Only a key the party
+/// holds and the verifier accepts makes the name a claim.
+///
+/// Skipped when the verifier does not ask for it ([`Expected::client_id_from_key`]),
+/// for the older vectors whose names are stand-ins.
+fn named_by_its_key(party: &Party, exp: &Expected<'_>) -> Result<(), String> {
+    if !exp.client_id_from_key {
+        return Ok(());
+    }
+    let mut ed25519 = 0usize;
+    for k in &party.keys {
+        if k.alg != Alg::Ed25519 {
+            continue;
+        }
+        ed25519 += 1;
+        if !ksg_core_v2::crypto::did_key::names(&party.id, k) {
+            let did = ksg_core_v2::crypto::did_key::of_public(k)
+                .map_err(|e| format!("the agent's key has no did:key: {e}"))?;
+            return Err(format!(
+                "the pages are authored by {}, but the key it signs under is {did} (Г-1)",
+                party.id.as_str()
+            ));
+        }
+    }
+    if ed25519 == 0 {
+        return Err(format!(
+            "{}: no Ed25519 key to name the agent by (Г-1)",
+            party.id.as_str()
+        ));
+    }
+    Ok(())
+}
+
 /// The agent as the verifier knows it: its accepted keys, all of one party.
-fn agent_of(keys: &KeySet) -> Result<Party, String> {
-    let first = keys.keys().next().ok_or("keys: the set is empty")?;
+fn agent_of(keys: &KeySet) -> Result<Party, String> {    let first = keys.keys().next().ok_or("keys: the set is empty")?;
     let id = first.kid.as_str().split('#').next().unwrap_or_default();
     let party = Party {
         id: Uri::parse(id).map_err(|e| format!("keys: {e}"))?,
@@ -351,6 +399,9 @@ fn bound_point(p: &BoundPoint, exp: &Expected<'_>, profile: &Profile) -> Report 
         Ok(a) => a,
         Err(e) => return no(e),
     };
+    if let Err(e) = named_by_its_key(&agent, exp) {
+        return no(e);
+    }
     if let Err(e) = verify_bound_point(p, &exp.container, &agent, profile) {
         return no(e.to_string());
     }

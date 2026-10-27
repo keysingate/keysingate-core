@@ -392,6 +392,13 @@ impl ContainerKeygen {
             public,
         })
     }
+
+    /// Names the key being born — [`MobileHalf::set_kid`], on this side: a
+    /// hand-off keeps the name the owner gives, a birth gives the `did:key` of
+    /// the group key (Г-1), known only once both rounds are done.
+    pub fn set_kid(&mut self, kid: Uri) {
+        self.kid = kid;
+    }
 }
 
 /// Two byte strings, each prefixed with its length (u32, big-endian).
@@ -877,6 +884,18 @@ impl MobileHalf {
     #[must_use]
     pub const fn kid(&self) -> &Uri {
         &self.kid
+    }
+
+    /// Names the key. A key born at initiation is called by the `did:key` of
+    /// the group key it is half of (Г-1), and that key exists only at the end
+    /// of the birth — so the name is given then, before the first signature
+    /// under it, and both halves are given the same one.
+    ///
+    /// The name is not the key: what makes it a claim is a verifier computing
+    /// the `did:key` from the key material and finding the same
+    /// (`ksg_core_v2::crypto::did_key`).
+    pub fn set_kid(&mut self, kid: Uri) {
+        self.kid = kid;
     }
 }
 

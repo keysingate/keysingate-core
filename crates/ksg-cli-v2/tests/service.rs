@@ -641,6 +641,7 @@ fn a_container_anchored_through_the_service_receives_its_notice() {
             container: id(&h),
             class: ksg_core_v2::doc::Class::Heavy,
             keys: keys_from_json(&std::fs::read(d.p("keys.json")).unwrap()).unwrap(),
+            client_id_from_key: true,
             anchors: &reader,
         },
     );

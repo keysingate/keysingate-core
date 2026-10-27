@@ -11,7 +11,8 @@ use ksg_container_v2::container::{
     Container, Evidence, JournalWrite, Release, UnloadRoute, Writes,
 };
 use ksg_container_v2::followup::{Discharge, Proof, Task};
-use ksg_container_v2::layers::Level;
+use ksg_container_v2::capsule::{self as capsule, MapRole};
+use ksg_container_v2::layers::{Level, OpenWith};
 use ksg_container_v2::seal::IssuerSeal;
 use ksg_container_v2::{Attachment, Event, Kind, Operation, Role, Roster, Where, Work, Wrapped};
 use ksg_core_v2::anchor::Attestation;
@@ -25,7 +26,7 @@ use ksg_core_v2::journal::{
 };
 use ksg_core_v2::section::{section_root, StatusRecord, StatusSection};
 use ksg_core_v2::status::{transition_for, Outcome, Status};
-use rand_core::OsRng;
+use rand_core::{OsRng, RngCore};
 use zeroize::Zeroizing;
 
 use crate::anchoring::{memo_of, AnchorCfg, Anchorer, Landing, MemoKind, PendingAnchor};
@@ -442,6 +443,57 @@ pub fn init(home: &Path, opts: &InitOptions) -> Result<Meta, String> {
     Ok(meta)
 }
 
+/// Seals a printed container into a capsule — the reader's `init`
+/// (`Spec_kapsula` §3, §10 п. 3): the code part (the module's WASM bytes), the
+/// state sealed under the holder's layer key, and one map — before initiation
+/// the holder's key plays the map's role (§4).
+///
+/// # Errors
+///
+/// A file is missing, the state does not open under the layer key, or the
+/// capsule does not assemble.
+pub fn home_to_capsule(home: &Path, code: &[u8]) -> Result<Vec<u8>, String> {
+    let home = Home(home.to_path_buf());
+    let meta: Meta = serde_json::from_slice(&read(&home.meta())?)
+        .map_err(|x| format!("container.json: {x}"))?;
+    let raw = Zeroizing::new(read(&home.layer_key())?);
+    let key: [u8; 32] = raw
+        .as_slice()
+        .try_into()
+        .map_err(|_| "layer.key: not 32 bytes")?;
+    let template = Hash::from_multihash(&meta.template).map_err(e)?;
+    let state = read(&home.container())?;
+    // The state must open before it goes in: a capsule no session can read is
+    // worse than a refusal at printing.
+    let container = Container::open_sealed(&state, &template, &key).map_err(e)?;
+    if container.template_id() != template {
+        return Err("container.json: the template is not the container's".into());
+    }
+    let map = OpenWith::from_bytes(key).seal_to();
+    // Before initiation there is no client's key, so no `did:key` to name it
+    // with (Г-1); after it, the name is the one the birth gave.
+    let client = meta
+        .client
+        .as_ref()
+        .map_or_else(|| uri(kid::UNBORN), |k| k.kid.clone());
+    let mut rng = OsRng;
+    let mut fill = |out: &mut [u8]| rng.fill_bytes(out);
+    capsule::seal_into_capsule(
+        &state,
+        &key,
+        &meta.template,
+        meta.artifact.as_str(),
+        client.as_str(),
+        meta.issued_ms,
+        meta.clock_ms,
+        code,
+        &[],
+        &[(MapRole::Holder, map)],
+        &mut fill,
+    )
+    .map_err(|x| format!("the capsule does not assemble: {x}"))
+}
+
 /// The two core documents a verifier walks the channel with, made at
 /// initiation (CH-5b): the packet bound to the buyer's key, and the container
 /// initiated on its serial — signed by the client's key just born (both
@@ -509,7 +561,7 @@ fn channel_documents(
     let msg = ksg_core_v2::canonical::canonical_bytes(&init).map_err(e)?;
     let client = client_signs(&msg)?
         .into_iter()
-        .find(|x| x.kid.as_str() == kid::CLIENT)
+        .find(|x| x.kid == init.agent.kid)
         .ok_or("no Ed25519 signature from the client")?;
     init.signatures = SignatureSet::new(vec![client, sign_doc(&init, &parties.owner).map_err(e)?]);
     let proof = ChannelProof {
@@ -3099,13 +3151,27 @@ impl Reader {
         };
         let artifact = self.meta.artifact.clone();
 
-        // The three messages of the birth.
-        let (keygen, hello) = MobileKeygen::start(uri(kid::CLIENT), &mut OsRng).map_err(e)?;
+        // The three messages of the birth. The key has no name yet: it is
+        // born by the first two, and only then can it be called by its own
+        // `did:key` (Г-1) — see below.
+        let (keygen, hello) = MobileKeygen::start(uri(kid::UNBORN), &mut OsRng).map_err(e)?;
         let reply = self
             .c
-            .begin_birth(uri(kid::CLIENT), &hello, &mut OsRng)
+            .begin_birth(uri(kid::UNBORN), &hello, &mut OsRng)
             .map_err(e)?;
-        let (mobile, public, fin) = keygen.finish(&reply).map_err(e)?;
+        let (mut mobile, mut public, fin) = keygen.finish(&reply).map_err(e)?;
+        // Г-1: the client agent's identifier is the `did:key` of the group key
+        // its two halves sign under — unique without a registry, and the name
+        // a verifier computes from the same key. Nothing is signed yet, so the
+        // birth's documents and every page after them carry the computed name.
+        let named = ksg_core_v2::crypto::did_key::kid(&public)
+            .map_err(|x| format!("the client's did:key: {x}"))?;
+        mobile.set_kid(named.clone());
+        public.kid = named.clone();
+        if let Err(x) = self.c.name_birth(named) {
+            self.c.cancel_birth();
+            return Err(e(x));
+        }
         // E-19: the commitment to the mobile half goes on the chain with the
         // anchor of initiation, so that the half alone can declare a loss.
         let share =
