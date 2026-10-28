@@ -18,6 +18,28 @@
 //! [`Answer::NeedsAnchor`] or [`Answer::NeedsSignature`] — it is not a refusal,
 //! and nothing is written when it answers so.
 //!
+//! # The anchor protocol (Pro)
+//!
+//! A Pro press goes in with a placeholder anchor first, and the module answers
+//! what the network owes instead of `Done`. The reader anchors each subject
+//! the module names and hands the attestation back in, repeating `Reanchor`
+//! after every `NeedsAnchor` until `Done`:
+//!
+//! ```text
+//! call(Work) → NeedsAnchor { kind: seal, prev, subject }
+//! call(Reanchor { attestation for the seal }) → NeedsAnchor { kind: status, … }
+//! call(Reanchor { attestation for the status }) → Done
+//! ```
+//!
+//! One command may owe two anchors — a seal and the status record pressed
+//! with it — so [`Request::Initiate`] (whose press moves the status, and
+//! whose journal opening, pressed by the reader's next `OpenJournal` in the
+//! same session, seals page 0) may answer `NeedsAnchor` twice in a row. The
+//! queue is the session's, oldest first, a seal before its status record. A
+//! `Reanchor` naming anything but the head of the queue is refused. Closing
+//! with anchors still owed is refused: a placeholder must never leave the
+//! session as a record's anchor.
+//!
 //! # What lies in the capsule's parts
 //!
 //! The capsule (`ksg_container_v2::capsule`) is a fixed number of blocks whose
@@ -118,8 +140,10 @@ pub enum Request {
 ///
 /// On the wire a word `"answer"` names the case: `{"answer":"done","bytes":…}`,
 /// `{"answer":"needs_signature","party":"owner","bytes":…}`,
-/// `{"answer":"needs_anchor","bytes":…}`, `{"answer":"refused","reason":…}`.
-/// Every byte string is base64url without padding.
+/// `{"answer":"needs_anchor","kind":"seal","prev":"…","subject":"…","bytes":…}`,
+/// `{"answer":"refused","reason":…}`.
+/// Every byte string is base64url without padding; `prev` and `subject` are
+/// multihashes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "answer", rename_all = "snake_case")]
 pub enum Answer {
@@ -131,9 +155,22 @@ pub enum Answer {
         bytes: Vec<u8>,
     },
     /// The module needs a memo anchored: the reader sends it, then
-    /// [`Request::Reanchor`] with the attestation.
+    /// [`Request::Reanchor`] with the attestation — and repeats that after
+    /// every further `NeedsAnchor` until `Done` (one command may owe a seal
+    /// and a status record; the queue is oldest first, a seal before its
+    /// status record).
     NeedsAnchor {
-        /// The memo, as the reader's anchorer reads it.
+        /// What owes the anchor: a journal seal, or a status record.
+        kind: AnchorKind,
+        /// What the anchored record links to: the previous seal's hash for a
+        /// seal (the container's identifier where there is no previous seal),
+        /// the previous status record's head for a status record.
+        prev: String,
+        /// What the anchor must attest: the seal's or the record's hash.
+        subject: String,
+        /// The memo's input as JSON — `{"kind","prev","subject","period"}`,
+        /// all multihashes, `period` null until the reader names the seal's
+        /// scan month — as the reader's anchorer reads it.
         #[serde(with = "b64")]
         bytes: Vec<u8>,
     },
@@ -150,6 +187,60 @@ pub enum Answer {
         /// Why, in the container's or the module's own words.
         reason: String,
     },
+}
+
+/// What owes the anchor an [`Answer::NeedsAnchor`] names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnchorKind {
+    /// A seal of the journal: the reader sends its blind memo.
+    Seal,
+    /// A status record: the reader sends its open memo.
+    Status,
+}
+
+/// One anchor the network owes the session: a press went in with a
+/// placeholder, and the reader's attestation replaces it through
+/// [`Request::Reanchor`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AnchorNeed {
+    /// What owes the anchor.
+    kind: AnchorKind,
+    /// What the anchored record links to.
+    prev: Hash,
+    /// What the anchor must attest.
+    subject: Hash,
+}
+
+/// What a press writes into the status section, if it moves the status — and
+/// what that record owes the network, when it owes any.
+type StatusWrite = (Option<(StatusRecord, Attestation)>, Option<AnchorNeed>);
+
+impl AnchorNeed {
+    /// The reader's answer for it: the kind, the multihashes, and the memo's
+    /// input as JSON.
+    fn answer(&self) -> Answer {
+        let prev = self.prev.to_multihash();
+        let subject = self.subject.to_multihash();
+        let kind = match self.kind {
+            AnchorKind::Seal => "seal",
+            AnchorKind::Status => "status",
+        };
+        let bytes = serde_json::json!({
+            "kind": kind,
+            "prev": prev,
+            "subject": subject,
+            "period": None::<String>,
+        })
+        .to_string()
+        .into_bytes();
+        Answer::NeedsAnchor {
+            kind: self.kind,
+            prev,
+            subject,
+            bytes,
+        }
+    }
 }
 
 /// Which party's secret the side file carries (`Spec_kapsula` §11).
@@ -297,6 +388,27 @@ pub struct Session {
     /// The other party's signature over [`Session::pending_bytes`], handed in
     /// by [`Request::Sign`] while a birth waits for it.
     pending_owner: Option<Signature>,
+    /// Page 0 waiting for the owner's co-seal in Pro (CH-26): a client's
+    /// session cannot seal the opening alone, so [`Request::OpenJournal`]
+    /// answers [`Answer::NeedsSignature`] and the owner's [`Request::Sign`]
+    /// presses it — the same round trip as an initiation. Never set together
+    /// with `pending_birth`: a birth waits before the container is born, an
+    /// opening after.
+    pending_opening: bool,
+    /// The opening seal's bytes the owner co-signs — the exact bytes the
+    /// container checks, as on the stand.
+    pending_open_bytes: Vec<u8>,
+    /// The offset page 0 was ticked with: ticked once and reused while the
+    /// owner's signature is missing, so a retry signs the same bytes.
+    pending_open_offset: Option<u64>,
+    /// The owner's co-seal over [`Session::pending_open_bytes`], handed in
+    /// by [`Request::Sign`] while an opening waits for it.
+    pending_open_owner: Option<Signature>,
+    /// The anchors the network still owes this session, oldest first — a
+    /// seal before its status record. A press in Pro queues them and answers
+    /// the head; each [`Request::Reanchor`] takes the head off and answers
+    /// the next, or `Done` when none is left.
+    pending_anchors: std::collections::VecDeque<AnchorNeed>,
 }
 
 impl Session {
@@ -415,6 +527,11 @@ impl Session {
             pending_birth: false,
             pending_bytes: Vec::new(),
             pending_owner: None,
+            pending_opening: false,
+            pending_open_bytes: Vec::new(),
+            pending_open_offset: None,
+            pending_open_owner: None,
+            pending_anchors: std::collections::VecDeque::new(),
         };
         for (i, raw) in anchored.iter().enumerate() {
             let attestation: Attestation =
@@ -438,7 +555,7 @@ impl Session {
     /// | [`Request::ExportPage`] | the page as JSON, as `ksg-verify-v2` reads it — the same bytes the session keeps in its outputs |
     /// | [`Request::Initiate`] | `{"container": "<multihash>", "mobile_half": "<base64url>", "share_commitment": "<base64url>"}` |
     /// | [`Request::OpenJournal`] | `{"pages": n, "seal": "<multihash>"}` |
-    /// | [`Request::Reanchor`] | empty |
+    /// | [`Request::Reanchor`] | the last owed anchor settled: `{"pages", "seal"}`, as the opening's |
     /// | [`Request::Sign`] | the same as the command whose signature was missing |
     pub fn call(&mut self, request: Request) -> Answer {
         match request {
@@ -465,7 +582,10 @@ impl Session {
     /// # Errors
     ///
     /// A birth is pending (pressing it needs another party's signature, and a
-    /// birth is never stored, so it must not be dropped); the capsule seals to
+    /// birth is never stored, so it must not be dropped); an anchor the
+    /// network still owes (a placeholder must never leave the session as a
+    /// record's anchor — answer every `NeedsAnchor` with a `Reanchor` first);
+    /// the capsule seals to
     /// more than one map — re-assembly rebuilds every part from this map's
     /// view, and the other party's `OwnerSecrets`/`ClientSecrets`, which this
     /// map cannot open, would be lost silently; the state or the capsule does
@@ -477,6 +597,24 @@ impl Session {
                  is never stored — press the initiation or cancel it before closing"
                     .into(),
             );
+        }
+        if self.pending_opening {
+            return Err(
+                "an opening is pending: page 0 waits for the owner's co-seal — answer the \
+                 NeedsSignature with a Sign before closing"
+                    .into(),
+            );
+        }
+        if let Some(owed) = self.pending_anchors.front() {
+            return Err(format!(
+                "an anchor is owed: the {} {} still carries its placeholder — answer the \
+                 NeedsAnchor with a Reanchor before closing",
+                match owed.kind {
+                    AnchorKind::Seal => "seal",
+                    AnchorKind::Status => "status record",
+                },
+                owed.subject.to_multihash(),
+            ));
         }
         if self.maps.len() > 1 {
             return Err(
@@ -726,6 +864,9 @@ impl Session {
                     bytes: self.pending_bytes.clone(),
                 }
             }
+            // A Pro press owes the network, not a refusal: the birth stays
+            // queued, and the reader's `Reanchor` finishes it.
+            Err(owed @ Answer::NeedsAnchor { .. }) => owed,
             Err(refused) => {
                 // A refusal writes nothing, so the birth is not kept: a
                 // session that cannot press this initiation is a session that
@@ -787,10 +928,23 @@ impl Session {
     }
 
     /// E-5: the journal opens — page 0, sealed by the client's two halves.
+    ///
+    /// Pro opens with the owner's seal and the anchor (CH-26), as on the
+    /// stand: a client's session answers [`Answer::NeedsSignature`] with the
+    /// seal's bytes, and the owner's [`Request::Sign`] presses page 0 — the
+    /// same round trip as an initiation. An owner's session seals at once.
     fn open_journal(&mut self) -> Answer {
         if !self.container.born() {
             return Answer::Refused {
                 reason: "the container is not initiated: the journal opens after E-4".into(),
+            };
+        }
+        if self.pending_opening {
+            // A second call while the owner's co-seal is still missing: the
+            // same answer, the same bytes — the opening is not re-ticked.
+            return Answer::NeedsSignature {
+                party: Party::Owner.name().into(),
+                bytes: self.pending_open_bytes.clone(),
             };
         }
         match self.press(
@@ -799,41 +953,129 @@ impl Session {
             &Evidence::None,
             PageToWrite::Opening,
         ) {
-            Ok(()) => Answer::Done {
-                bytes: serde_json::json!({
-                    "pages": self.container.pages(),
-                    "seal": self.container.top_seal_hash().map(|h| h.to_multihash()),
-                })
-                .to_string()
-                .into_bytes(),
-            },
-            Err(answer) => answer,
+            Ok(()) => {
+                self.clear_opening();
+                Answer::Done {
+                    bytes: serde_json::json!({
+                        "pages": self.container.pages(),
+                        "seal": self.container.top_seal_hash().map(|h| h.to_multihash()),
+                    })
+                    .to_string()
+                    .into_bytes(),
+                }
+            }
+            Err(owed @ Answer::NeedsAnchor { .. }) => {
+                self.clear_opening();
+                owed
+            }
+            Err(still @ Answer::NeedsSignature { .. }) => still,
+            Err(refused) => refused,
         }
     }
 
-    /// Page 0: the opening's seal, signed by the client's two halves.
-    fn opening_page(&mut self) -> Result<Option<JournalWrite>, Answer> {
-        let offset_ms = self.tick();
-        let (bytes, _hash) = self
-            .container
-            .opening_seal(offset_ms)
-            .map_err(|e| Answer::Refused {
-                reason: format!("the opening does not seal: {e}"),
-            })?;
+    /// The opening's pending co-seal state goes: the press went in (its
+    /// anchor, if any, now lives in the queue) or with it.
+    fn clear_opening(&mut self) {
+        self.pending_opening = false;
+        self.pending_open_bytes.clear();
+        self.pending_open_offset = None;
+        self.pending_open_owner = None;
+    }
+
+    /// Page 0: the opening's seal, signed by the client's two halves — and,
+    /// in Pro, the owner's co-seal and the placeholder anchor (CH-26), as the
+    /// stand presses it. The seal's anchor goes back with the write: in Pro
+    /// the press queues it, and the reader's [`Request::Reanchor`] swaps the
+    /// placeholder for the network's attestation.
+    fn opening_page(
+        &mut self,
+    ) -> Result<(Option<JournalWrite>, Option<AnchorNeed>), Answer> {
+        let offset_ms = match self.pending_open_offset {
+            Some(ticked) => ticked,
+            None => self.tick(),
+        };
+        let (bytes, hash) =
+            self.container
+                .opening_seal(offset_ms)
+                .map_err(|e| Answer::Refused {
+                    reason: format!("the opening does not seal: {e}"),
+                })?;
         let seal = self.sign_client(&bytes)?;
-        Ok(Some(JournalWrite::Open {
-            offset_ms,
-            sealing: Box::new(Sealing {
-                seal: SignatureSet::new(seal),
-                ..Sealing::default()
+        let pro = self.container.opening_form() == ksg_core_v2::journal::Mode::Pro;
+        if !pro {
+            self.pending_open_offset = None;
+            return Ok((
+                Some(JournalWrite::Open {
+                    offset_ms,
+                    sealing: Box::new(Sealing {
+                        seal: SignatureSet::new(seal),
+                        ..Sealing::default()
+                    }),
+                }),
+                None,
+            ));
+        }
+        if self.pending_open_offset.is_none() {
+            self.pending_open_offset = Some(offset_ms);
+        }
+        // The owner's session seals at once; a client's waits for the
+        // co-seal handed in through `Sign` — the exact seal bytes, as the
+        // container checks them.
+        let owner = match self.sign_owner(&bytes) {
+            Ok(s) => s,
+            Err(missing @ Answer::NeedsSignature { .. }) => {
+                self.pending_opening = true;
+                self.pending_open_bytes = bytes;
+                return Err(missing);
+            }
+            Err(refused) => return Err(refused),
+        };
+        Ok((
+            Some(JournalWrite::Open {
+                offset_ms,
+                sealing: Box::new(Sealing {
+                    seal: SignatureSet::new(seal),
+                    owner: Some(SignatureSet::new(vec![owner])),
+                    anchor: Some(local_anchor(hash)),
+                    ..Sealing::default()
+                }),
             }),
-        }))
+            Some(AnchorNeed {
+                kind: AnchorKind::Seal,
+                prev: *self.container.id(),
+                subject: hash,
+            }),
+        ))
     }
 
     /// The other party's signature over the bytes a [`Answer::NeedsSignature`]
     /// handed out: the pending command is pressed with it (Л-1 — the
-    /// signature is made outside the module, the check is inside).
+    /// signature is made outside the module, the check is inside). An
+    /// initiation's birth and a Pro opening's co-seal never wait together: a
+    /// birth is made before the container is born, an opening after.
     fn sign_pending(&mut self, raw: &[u8]) -> Answer {
+        if self.pending_opening {
+            let signature: Signature = match serde_json::from_slice(raw) {
+                Ok(s) => s,
+                Err(e) => {
+                    return Answer::Refused {
+                        reason: format!("the signature does not read: {e}"),
+                    }
+                }
+            };
+            self.pending_open_owner = Some(signature);
+            return match self.open_journal_after_sign() {
+                Ok(done) => {
+                    self.clear_opening();
+                    done
+                }
+                Err(still @ Answer::NeedsSignature { .. }) => still,
+                Err(refused) => {
+                    self.pending_open_owner = None;
+                    refused
+                }
+            };
+        }
         if !self.pending_birth {
             return Answer::Refused {
                 reason: "nothing waits for a signature".into(),
@@ -866,6 +1108,9 @@ impl Session {
                     bytes: self.pending_bytes.clone(),
                 }
             }
+            // As in [`Session::initiate`]: the birth stays queued for the
+            // reader's `Reanchor`, which finishes it.
+            Err(owed @ Answer::NeedsAnchor { .. }) => owed,
             Err(refused) => {
                 self.pending_owner = None;
                 refused
@@ -873,7 +1118,35 @@ impl Session {
         }
     }
 
-    /// The network's attestation in place of a placeholder.
+    /// Page 0 with the owner's co-seal handed in: the press with it — `Done`,
+    /// or what the network owes instead (`NeedsAnchor`, then the reader's
+    /// `Reanchor`), as after an initiation.
+    fn open_journal_after_sign(&mut self) -> Result<Answer, Answer> {
+        match self.press(
+            Operation::OpenJournal,
+            &[Party::Client],
+            &Evidence::None,
+            PageToWrite::Opening,
+        ) {
+            Ok(()) => Ok(Answer::Done {
+                bytes: serde_json::json!({
+                    "pages": self.container.pages(),
+                    "seal": self.container.top_seal_hash().map(|h| h.to_multihash()),
+                })
+                .to_string()
+                .into_bytes(),
+            }),
+            Err(owed @ Answer::NeedsAnchor { .. }) => Ok(owed),
+            Err(still @ Answer::NeedsSignature { .. }) => Err(still),
+            Err(refused) => Err(refused),
+        }
+    }
+
+    /// The network's attestation in place of a placeholder — and the next
+    /// anchor owed, if one is still queued, or `Done` when none is left.
+    ///
+    /// An attestation naming anything but the head of the queue is refused:
+    /// the reader anchors what the module asked for, oldest first.
     fn reanchor(&mut self, raw: &[u8]) -> Answer {
         let attestation: Attestation = match serde_json::from_slice(raw) {
             Ok(a) => a,
@@ -883,8 +1156,40 @@ impl Session {
                 }
             }
         };
+        if let Some(head) = self.pending_anchors.front() {
+            if attestation.subject != head.subject {
+                return Answer::Refused {
+                    reason: format!(
+                        "the anchor names {}, but the {} the module waits for is {}",
+                        attestation.subject.to_multihash(),
+                        match head.kind {
+                            AnchorKind::Seal => "seal",
+                            AnchorKind::Status => "status record",
+                        },
+                        head.subject.to_multihash(),
+                    ),
+                };
+            }
+        }
         match self.apply_anchor(attestation) {
-            Ok(()) => Answer::Done { bytes: Vec::new() },
+            Ok(()) => {
+                self.pending_anchors.pop_front();
+                if let Some(next) = self.pending_anchors.front() {
+                    return next.answer();
+                }
+                if self.pending_birth {
+                    let id = *self.container.id();
+                    return self.birth_done(id);
+                }
+                Answer::Done {
+                    bytes: serde_json::json!({
+                        "pages": self.container.pages(),
+                        "seal": self.container.top_seal_hash().map(|h| h.to_multihash()),
+                    })
+                    .to_string()
+                    .into_bytes(),
+                }
+            }
             Err(reason) => Answer::Refused { reason },
         }
     }
@@ -949,6 +1254,11 @@ impl Session {
                 return Ok(signature.clone());
             }
         }
+        if let Some(signature) = &self.pending_open_owner {
+            if msg == self.pending_open_bytes.as_slice() {
+                return Ok(signature.clone());
+            }
+        }
         match &self.owner {
             Some(signer) => Ok(signer.sign(msg)),
             None => Err(self.missing(Party::Owner, msg)),
@@ -977,6 +1287,11 @@ impl Session {
 
     /// Presses one of the three buttons: the event, its signatures, the page,
     /// the status record — all in memory.
+    ///
+    /// In Pro the press goes in with placeholder anchors and queues what the
+    /// network owes, oldest first — a seal before its status record — and
+    /// answers the head of the queue instead of `Ok`. Light and bare press
+    /// with their local anchor or none and never queue: `Ok`, as before.
     fn press(
         &mut self,
         op: Operation,
@@ -996,8 +1311,8 @@ impl Session {
         event.covered = event.subject();
         let covered = event.covered.clone();
         event.signatures = self.sign_all(&covered, who)?;
-        let page = self.page(page)?;
-        let status = self.status_record(op)?;
+        let (page, page_need) = self.opening_page_or(page)?;
+        let (status, status_need) = self.status_record(op)?;
         let keys = self.container.roster().keys().clone();
         let at_ms = Some(self.clock_ms);
         self.container
@@ -1015,14 +1330,46 @@ impl Session {
             .map_err(|e| Answer::Refused {
                 reason: format!("refused: {e}"),
             })?;
+        if self.container.is_pro() {
+            if let Some(need) = page_need {
+                self.pending_anchors.push_back(need);
+            }
+            if let Some(need) = status_need {
+                self.pending_anchors.push_back(need);
+            }
+            if let Some(head) = self.pending_anchors.front() {
+                return Err(head.answer());
+            }
+        }
         Ok(())
     }
 
-    /// The page a command writes, sealed the way its parties do (CH-29).
-    fn page(&mut self, spec: PageToWrite) -> Result<Option<JournalWrite>, Answer> {
+    /// The page a command writes: page 0 through its own co-seal round trip,
+    /// a record through the draft's seal — and what its seal owes the
+    /// network, when it owes any.
+    fn opening_page_or(
+        &mut self,
+        spec: PageToWrite,
+    ) -> Result<(Option<JournalWrite>, Option<AnchorNeed>), Answer> {
+        match spec {
+            PageToWrite::Opening => self.opening_page(),
+            _ => self.page(spec),
+        }
+    }
+
+    /// The page a command writes, sealed the way its parties do (CH-29) — and
+    /// what its seal owes the network, when it owes any.
+    fn page(
+        &mut self,
+        spec: PageToWrite,
+    ) -> Result<(Option<JournalWrite>, Option<AnchorNeed>), Answer> {
         let (kind, content) = match spec {
-            PageToWrite::None => return Ok(None),
-            PageToWrite::Opening => return self.opening_page(),
+            PageToWrite::None => return Ok((None, None)),
+            PageToWrite::Opening => {
+                return Err(Answer::Refused {
+                    reason: "the opening goes through its own co-seal round trip".into(),
+                })
+            }
             PageToWrite::Record(kind, content) => (kind, content),
         };
         let offset_ms = self.tick();
@@ -1039,12 +1386,17 @@ impl Session {
             .map_err(|e| Answer::Refused {
                 reason: format!("the page is not drafted: {e}"),
             })?;
-        self.seal_draft(draft).map(Some)
+        self.seal_draft(draft).map(|(w, n)| (Some(w), n))
     }
 
     /// Seals a drafted record: the client's seal through both halves, the
     /// owner's where the journal asks (CH-29), the placeholder anchor in Pro.
-    fn seal_draft(&mut self, draft: Draft) -> Result<JournalWrite, Answer> {
+    ///
+    /// The anchor's need goes back with the write: in Pro the press queues it
+    /// and answers [`Answer::NeedsAnchor`], and the reader's
+    /// [`Request::Reanchor`] swaps the placeholder for the network's
+    /// attestation.
+    fn seal_draft(&mut self, draft: Draft) -> Result<(JournalWrite, Option<AnchorNeed>), Answer> {
         let bytes = draft.seal_bytes().map_err(|e| Answer::Refused {
             reason: format!("the seal does not encode: {e}"),
         })?;
@@ -1058,26 +1410,32 @@ impl Session {
         if draft.needs_owner() {
             sealing.owner = Some(SignatureSet::new(vec![self.sign_owner(&bytes)?]));
         }
-        if draft.is_pro() {
+        let need = draft.is_pro().then(|| AnchorNeed {
+            kind: AnchorKind::Seal,
+            prev: draft.seal().prev.unwrap_or(*self.container.id()),
+            subject: hash,
+        });
+        if need.is_some() {
             sealing.anchor = Some(local_anchor(hash));
         }
-        Ok(JournalWrite::Record {
-            draft: Box::new(draft),
-            sealing: Box::new(sealing),
-        })
+        Ok((
+            JournalWrite::Record {
+                draft: Box::new(draft),
+                sealing: Box::new(sealing),
+            },
+            need,
+        ))
     }
 
-    /// The status record of a move, if the operation moves the status at all.
+    /// The status record of a move, if the operation moves the status at all —
+    /// and what it owes the network, when it owes any.
     ///
     /// The container checks the record against the keys it pinned, not against
     /// a role: this module has no issuer's seed, so the session's own key
     /// signs here (the reader on the stand signs with the issuer's).
-    fn status_record(
-        &mut self,
-        op: Operation,
-    ) -> Result<Option<(StatusRecord, Attestation)>, Answer> {
+    fn status_record(&mut self, op: Operation) -> Result<StatusWrite, Answer> {
         let Some(event) = op.event() else {
-            return Ok(None);
+            return Ok((None, None));
         };
         let Outcome::Moves(next) = transition_for(
             self.container.class(),
@@ -1085,7 +1443,7 @@ impl Session {
             self.container.blocked(),
             event,
         ) else {
-            return Ok(None);
+            return Ok((None, None));
         };
         let mut record = StatusRecord {
             context: ksg_core_v2::doc::Context,
@@ -1109,7 +1467,12 @@ impl Session {
         let hash = record.hash().map_err(|e| Answer::Refused {
             reason: format!("the status record does not hash: {e}"),
         })?;
-        Ok(Some((record, local_anchor(hash))))
+        let need = AnchorNeed {
+            kind: AnchorKind::Status,
+            prev: record.prev,
+            subject: hash,
+        };
+        Ok((Some((record, local_anchor(hash))), Some(need)))
     }
 
     /// Offsets are milliseconds since issuance and grow strictly, even when

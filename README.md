@@ -234,7 +234,7 @@ flowchart TB
 
 - [x] **The capsule** — one fixed-size 6 MiB file indistinguishable from noise; each party holds one secret file; parts are sealed to the parties' maps (X25519 + ML-KEM-768)
 - [x] Agent tools over MCP; the stand's demo chain
-- [x] The container's code running inside the capsule: the module in wasmtime behind the two imports, a session of open → call ×N → close, the `ksg-capsule` command line; the offline chain verifies (K5 offline). The Pro half — anchors read by the reader — is not wired into `ksg-capsule` yet
+- [x] The container's code running inside the capsule: the module in wasmtime behind the two imports, a session of open → call ×N → close, the `ksg-capsule` command line; Pro end to end through the capsule on a local Solana node: initiation and journal opening with the owner's co-seal, three anchored pages exported and ACCEPTED, tampered pages REJECTED (K5)
 - [x] Muse Spark: every model call recorded as a page; image evidence through SAM 3.1 (the mask is byte-identical when re-asked with the same box); the agent's explanation for the judge, its citations checked against the verified pages — the whole scene runs with one command (`scripts/demo_orchestrator.sh`), five pages ACCEPTED
 - [x] The client agent is named by the `did:key` of its own group key — two receivers never share an identifier
 

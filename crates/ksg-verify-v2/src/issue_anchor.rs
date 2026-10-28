@@ -2,21 +2,25 @@
 //!
 //! Put once, by the issuer, when a `bare` is handed over. It answers one
 //! question for the next issuer: "has this person already had a free `bare`
-//! of this release and software version?" — a match on any checked document
+//! of this release and software version?" — a match on any checked holder
 //! makes the next one paid.
+//!
+//! The anchor counts the holder, not the documents (decision 27.10): the
+//! owner's e-mail or the orchestrator's `did:web`, never a passport, an
+//! identity card or a tax number.
 //!
 //! | Part | How |
 //! |---|---|
-//! | content | a fixed table of [`SLOTS`] document tags; a missing document is a stub |
-//! | mask | which slots are documents and which are stubs — inside the table |
+//! | content | a fixed table of [`SLOTS`] holder tags; an absent holder is a stub |
+//! | mask | which slots are holders and which are stubs — inside the table |
 //! | protection | the whole table is encrypted (XChaCha20-Poly1305) |
 //! | key | `bare check key`, a partner key held by the issuers, one per year |
 //! | in the clear | the tag and the year only — the year picks the key |
 //!
-//! A document tag is a keyed PRF (HKDF-SHA256) of the document's kind and its
-//! normalized number, never a plain hash: a passport number has few enough
-//! values to be found from a plain hash by trying them all. A stub is random
-//! and looks the same. The table has the same size whatever it holds.
+//! A holder tag is a keyed PRF (HKDF-SHA256) of the holder's kind and its
+//! normalized value, never a plain hash: an e-mail has few enough values to be
+//! found from a plain hash by trying them all. A stub is random and looks the
+//! same. The table has the same size whatever it holds.
 //!
 //! The container never holds this key and never reads anchors: they are
 //! written and read by the issuers' program, outside the container.
@@ -34,27 +38,35 @@ const NONCE_LEN: usize = 24;
 const TABLE_LEN: usize = 1 + 1 + 32 + SLOTS * TAG_LEN;
 const SALT: &[u8] = b"ksg:ia:salt:v1";
 
-/// Kinds of document, one per slot. The slot of a kind never changes: the
-/// next issuer compares slot to slot.
+/// Kinds of holder, one per slot. The slot of a kind never changes: the next
+/// issuer compares slot to slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DocKind {
-    /// Passport.
-    Passport = 0,
-    /// National identity card.
-    IdCard = 1,
-    /// Driving licence.
-    DrivingLicence = 2,
-    /// Tax number.
-    TaxNumber = 3,
-    /// Residence permit.
-    ResidencePermit = 4,
-    /// Social insurance number.
-    SocialInsurance = 5,
-    /// Reserved.
-    Other1 = 6,
-    /// Reserved.
-    Other2 = 7,
+    /// The owner's e-mail address.
+    Email = 0,
+    /// The orchestrator's `did:web` identifier.
+    DidWeb = 1,
+}
+
+impl DocKind {
+    /// A holder value as compared: trimmed and lower case. An e-mail is taken
+    /// as it stands; a `did:web` must carry its `did:web:` prefix.
+    ///
+    /// # Errors
+    ///
+    /// The value is empty, or a `did:web` without its prefix.
+    pub fn normalize(self, value: &str) -> Result<String, String> {
+        let v = value.trim().to_lowercase();
+        if v.is_empty() {
+            return Err("holder: empty value".into());
+        }
+        match self {
+            Self::Email => Ok(v),
+            Self::DidWeb if v.starts_with("did:web:") => Ok(v),
+            Self::DidWeb => Err("holder: did:web must start with \"did:web:\"".into()),
+        }
+    }
 }
 
 /// `bare check key`: the issuers' partner key. The emitter holds the master;
@@ -113,18 +125,16 @@ impl BareCheckKey {
         Self(self.expand(b"ksg:ia:period:v1", &[period.as_bytes()]))
     }
 
-    /// The tag of one document under this year's key.
+    /// The tag of one holder under this year's key: an e-mail trimmed and
+    /// lower case, or a lower-case `did:web` with its prefix.
     ///
     /// # Errors
     ///
-    /// The number holds no letter or digit.
-    pub fn doc_tag(&self, kind: DocKind, number: &str) -> Result<[u8; TAG_LEN], String> {
-        let n = normalize(number);
-        if n.is_empty() {
-            return Err("document number: no letter or digit".into());
-        }
+    /// The value is empty, or a `did:web` without its prefix.
+    pub fn doc_tag(&self, kind: DocKind, value: &str) -> Result<[u8; TAG_LEN], String> {
+        let v = kind.normalize(value)?;
         let hash_key = self.expand(b"ksg:ia:doc-key:v1", &[]);
-        Ok(Self(hash_key).expand(b"ksg:ia:doc:v1", &[&[kind as u8], n.as_bytes()]))
+        Ok(Self(hash_key).expand(b"ksg:ia:doc:v1", &[&[kind as u8], v.as_bytes()]))
     }
 
     fn enc_key(&self) -> zeroize::Zeroizing<[u8; 32]> {
@@ -152,21 +162,10 @@ pub fn scope(release: &str, version: &str) -> Hash {
     Hash::sha256_fields(&[b"ksg:ia:scope:v1", release.as_bytes(), version.as_bytes()])
 }
 
-/// A document number as compared: letters and digits only, upper case.
-/// "AB 123-456" and "ab123456" are one number.
-#[must_use]
-pub fn normalize(number: &str) -> String {
-    number
-        .chars()
-        .filter(|c| c.is_alphanumeric())
-        .flat_map(char::to_uppercase)
-        .collect()
-}
-
 /// An opened anchor.
 #[derive(Clone, PartialEq, Eq)]
 pub struct IssueAnchor {
-    /// Bit `i` set: slot `i` is a document; clear: a stub.
+    /// Bit `i` set: slot `i` is a holder; clear: a stub.
     pub mask: u8,
     /// [`scope`] of the `bare` issued.
     pub scope: Hash,
@@ -183,22 +182,22 @@ impl core::fmt::Debug for IssueAnchor {
 }
 
 impl IssueAnchor {
-    /// Whether this anchor counts against a person showing `docs` for a
+    /// Whether this anchor counts against a holder showing `holders` for a
     /// `bare` of `scope`: the same scope and a match on any checked slot.
     /// Every slot is compared, whatever the outcome.
     ///
     /// # Errors
     ///
-    /// A document number is empty.
+    /// A holder value is empty or not a `did:web`.
     pub fn matches(
         &self,
         key: &BareCheckKey,
         scope: &Hash,
-        docs: &[(DocKind, &str)],
+        holders: &[(DocKind, &str)],
     ) -> Result<bool, String> {
         let mut hit = 0u8;
-        for (kind, number) in docs {
-            let t = key.doc_tag(*kind, number)?;
+        for (kind, value) in holders {
+            let t = key.doc_tag(*kind, value)?;
             let i = *kind as usize;
             let checked = (self.mask >> i) & 1;
             hit |= checked & u8::from(ct_eq(&t, &self.slots[i]));
@@ -207,23 +206,24 @@ impl IssueAnchor {
     }
 }
 
-/// The anchor for a `bare` of `scope` handed over against `docs`, under the
+/// The anchor for a `bare` of `scope` handed over against `holders`, under the
 /// year `period`'s key. `seed` — 32 fresh random bytes from the caller, new
 /// for every anchor: it gives the stubs and the nonce.
 ///
 /// # Errors
 ///
-/// No document, a document number is empty, or a kind given twice.
+/// No holder, a holder value is empty or not a `did:web`, or a kind given
+/// twice.
 pub fn seal(
     key: &BareCheckKey,
     period: &str,
     scope: &Hash,
-    docs: &[(DocKind, &str)],
+    holders: &[(DocKind, &str)],
     seed: [u8; 32],
 ) -> Result<String, String> {
     check_period(period)?;
-    if docs.is_empty() {
-        return Err("issuance anchor: no document".into());
+    if holders.is_empty() {
+        return Err("issuance anchor: no holder".into());
     }
     let seed = BareCheckKey(seed);
     let mut mask = 0u8;
@@ -231,13 +231,13 @@ pub fn seal(
     for (i, s) in slots.iter_mut().enumerate() {
         *s = seed.expand(b"ksg:ia:stub:v1", &[&[i as u8]]);
     }
-    for (kind, number) in docs {
+    for (kind, value) in holders {
         let i = *kind as usize;
         if mask & (1 << i) != 0 {
             return Err(format!("issuance anchor: {kind:?} given twice"));
         }
         mask |= 1 << i;
-        slots[i] = key.doc_tag(*kind, number)?;
+        slots[i] = key.doc_tag(*kind, value)?;
     }
     let mut table = zeroize::Zeroizing::new(Vec::with_capacity(TABLE_LEN));
     table.push(1);
@@ -356,52 +356,86 @@ mod tests {
     }
 
     const ANNA: &[(DocKind, &str)] = &[
-        (DocKind::Passport, "AB 123456"),
-        (DocKind::TaxNumber, "1234567890"),
+        (DocKind::Email, "Anna.Petrova@Example.COM"),
+        (DocKind::DidWeb, "did:web:example.org:anna"),
     ];
 
     #[test]
-    fn a_second_free_bare_is_caught_by_any_one_document() {
+    fn a_second_free_bare_is_caught_by_any_one_holder() {
         let m = seal(&y2026(), "2026", &sc(), ANNA, [1; 32]).unwrap();
         let a = open(&y2026(), &m).unwrap();
+        // the same e-mail in another case and with spaces around it
         assert!(a
-            .matches(&y2026(), &sc(), &[(DocKind::TaxNumber, "12345 67890")])
+            .matches(
+                &y2026(),
+                &sc(),
+                &[(DocKind::Email, " anna.petrova@EXAMPLE.com ")]
+            )
             .unwrap());
+        // the same did:web in another case
         assert!(a
-            .matches(&y2026(), &sc(), &[(DocKind::Passport, "ab-123456")])
+            .matches(
+                &y2026(),
+                &sc(),
+                &[(DocKind::DidWeb, "DID:WEB:Example.ORG:Anna")]
+            )
             .unwrap());
     }
 
     #[test]
-    fn another_person_another_scope_or_another_kind_is_free() {
+    fn another_holder_another_scope_or_another_kind_is_free() {
         let a = open(
             &y2026(),
             &seal(&y2026(), "2026", &sc(), ANNA, [1; 32]).unwrap(),
         )
         .unwrap();
         assert!(!a
-            .matches(&y2026(), &sc(), &[(DocKind::Passport, "XY999999")])
+            .matches(&y2026(), &sc(), &[(DocKind::Email, "boris@example.com")])
             .unwrap());
         assert!(!a
             .matches(&y2026(), &scope("bare-2026-10", "2.1.0"), ANNA)
             .unwrap());
-        // the same number shown as another kind of document
+        // the same value shown as another kind of holder
         assert!(!a
-            .matches(&y2026(), &sc(), &[(DocKind::IdCard, "AB123456")])
+            .matches(
+                &y2026(),
+                &sc(),
+                &[(DocKind::DidWeb, "did:web:anna.petrova@example.com")]
+            )
             .unwrap());
+    }
+
+    #[test]
+    fn did_web_without_its_prefix_is_refused() {
+        assert!(DocKind::DidWeb.normalize("example.org:anna").is_err());
+        assert!(y2026()
+            .doc_tag(DocKind::DidWeb, "example.org:anna")
+            .is_err());
+        assert!(seal(
+            &y2026(),
+            "2026",
+            &sc(),
+            &[(DocKind::DidWeb, "anna@example.com")],
+            [1; 32]
+        )
+        .is_err());
     }
 
     #[test]
     fn a_stub_never_matches() {
         let a = open(
             &y2026(),
-            &seal(&y2026(), "2026", &sc(), ANNA, [1; 32]).unwrap(),
+            &seal(&y2026(), "2026", &sc(), &ANNA[..1], [1; 32]).unwrap(),
         )
         .unwrap();
-        assert_eq!(a.mask, 0b0000_1001);
-        for k in [DocKind::IdCard, DocKind::DrivingLicence, DocKind::Other2] {
-            assert!(!a.matches(&y2026(), &sc(), &[(k, "AB123456")]).unwrap());
-        }
+        assert_eq!(a.mask, 0b0000_0001);
+        assert!(!a
+            .matches(
+                &y2026(),
+                &sc(),
+                &[(DocKind::DidWeb, "did:web:example.org:anna")]
+            )
+            .unwrap());
     }
 
     #[test]
@@ -410,15 +444,17 @@ mod tests {
         let two = seal(&y2026(), "2026", &sc(), ANNA, [2; 32]).unwrap();
         assert_eq!(one.len(), two.len());
         assert_eq!(period_of(&one), Some("2026"));
-        assert!(!one.to_uppercase().contains("AB123456"));
+        assert!(!one.to_lowercase().contains("petrova"));
         assert!(!one.contains(&hex::encode(
-            y2026().doc_tag(DocKind::Passport, "AB123456").unwrap()
+            y2026()
+                .doc_tag(DocKind::Email, "anna.petrova@example.com")
+                .unwrap()
         )));
         assert!(one.len() < 1024, "fits a chain record: {}", one.len());
     }
 
     #[test]
-    fn the_same_person_twice_gives_unlinkable_anchors() {
+    fn the_same_holder_twice_gives_unlinkable_anchors() {
         let a = seal(&y2026(), "2026", &sc(), ANNA, [1; 32]).unwrap();
         let b = seal(&y2026(), "2026", &sc(), ANNA, [2; 32]).unwrap();
         assert_ne!(a, b);
@@ -441,15 +477,11 @@ mod tests {
     fn bad_input_is_refused() {
         assert!(seal(&y2026(), "26", &sc(), ANNA, [1; 32]).is_err());
         assert!(seal(&y2026(), "2026", &sc(), &[], [1; 32]).is_err());
-        assert!(seal(
-            &y2026(),
-            "2026",
-            &sc(),
-            &[(DocKind::Passport, " - ")],
-            [1; 32]
-        )
-        .is_err());
-        let twice = [(DocKind::Passport, "A1"), (DocKind::Passport, "B2")];
+        assert!(seal(&y2026(), "2026", &sc(), &[(DocKind::Email, "   ")], [1; 32]).is_err());
+        let twice = [
+            (DocKind::Email, "a@example.com"),
+            (DocKind::Email, "b@example.com"),
+        ];
         assert!(seal(&y2026(), "2026", &sc(), &twice, [1; 32]).is_err());
         assert!(open(&y2026(), "ksg:bs 00 00").is_err());
     }

@@ -21,7 +21,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export PATH="$HOME/.cargo/bin:$PATH"
 CLASS=light
 if [ "${KSG_CLASS:-light}" != light ]; then
-  echo "only the light capsule is checked offline: the Pro half needs the reader's anchoring (not wired yet)"
+  echo "only the light capsule is checked offline: the Pro half runs in scripts/demo_pro_capsule_localnet.sh"
   exit 2
 fi
 W=$(mktemp -d)

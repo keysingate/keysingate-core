@@ -338,7 +338,7 @@ fn base_takes_light_and_pro_but_not_bare() {
 }
 
 #[test]
-fn the_issuance_anchor_makes_the_second_bare_paid() {
+fn the_issuance_anchor_refuses_the_second_bare() {
     let d = Dir::new("issue");
     let node = MockBase::start();
     let key = key_file(&d, "evm.key", 0x43);
@@ -367,20 +367,28 @@ fn the_issuance_anchor_makes_the_second_bare_paid() {
         }
         ok(&a)
     };
-    assert!(run("check", "passport:AB 123456", "0.2").contains("free"));
-    assert!(run("put", "passport:AB 123456,tax-number:1234567890", "0.2").contains("anchored"));
-    // The same passport, written differently, of the same release and version.
-    let out = run("check", "passport:ab123456", "0.2");
-    assert!(out.contains("paid"), "{out}");
+    assert!(run("check", "email:alice@example.com", "0.2").contains("free"));
+    assert!(run(
+        "put",
+        "email:alice@example.com,did-web:did:web:example.org:alice",
+        "0.2"
+    )
+    .contains("anchored"));
+    // The same e-mail, written differently, of the same release and version:
+    // the beta repeats neither free nor for payment (owner's decision 27.10).
+    let out = run("check", "email:ALICE@Example.COM", "0.2");
+    assert!(out.contains("refused"), "{out}");
     // The issuance label: who issued (the issuer's key 0x43…) and when.
     assert!(out.contains("issued     block "), "{out}");
     assert!(
         out.contains(&ksg_anchor_v2::evm::hex0x(&evm_address(0x43))),
         "{out}"
     );
+    // The same did:web alone is enough to refuse too.
+    assert!(run("check", "did-web:did:web:example.org:Alice", "0.2").contains("refused"));
     // Another person, or another version of the software: free.
-    assert!(run("check", "passport:CD 999999", "0.2").contains("free"));
-    assert!(run("check", "passport:AB 123456", "0.3").contains("free"));
+    assert!(run("check", "email:bob@example.com", "0.2").contains("free"));
+    assert!(run("check", "email:alice@example.com", "0.3").contains("free"));
 }
 
 /// The container's blind anchor key, as `initiate` left it beside the half.
@@ -1169,7 +1177,7 @@ fn the_issuance_label_is_read_with_the_owners_key_and_passes_on_with_the_owner()
         "--check-key",
         &check,
         "--docs",
-        "passport:AB 123456",
+        "email:alice@example.com",
         "--release",
         "ksg:em:test:000001",
         "--version",
@@ -1287,7 +1295,7 @@ fn the_issuance_label_passes_to_the_leaders_owner_as_a_step_of_the_attachment() 
         "--check-key",
         &check,
         "--docs",
-        "passport:AB 123456",
+        "email:alice@example.com",
         "--release",
         "ksg:em:test:000001",
         "--version",

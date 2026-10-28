@@ -1047,27 +1047,36 @@ fn desk_command(role: &str, args: &[String]) -> Result<(), Failure> {
     Ok(())
 }
 
+/// The holder the anchor counts (owner's decision 27.10): the owner's e-mail
+/// or the orchestrator's `did:web`, never a document. `email:<address>`,
+/// `did-web:<did:web:…>`.
 fn parse_docs(s: &str) -> Result<Vec<(ksg_verify_v2::issue_anchor::DocKind, String)>, Failure> {
     use ksg_verify_v2::issue_anchor::DocKind;
     s.split(',')
         .map(|d| {
             let (k, n) = d
                 .split_once(':')
-                .ok_or_else(|| usage("--docs is KIND:NUMBER[,KIND:NUMBER…]"))?;
+                .ok_or_else(|| usage("--docs is email:<address>[,did-web:<did:web:…>]"))?;
+            let n = n.trim();
             let kind = match k {
-                "passport" => DocKind::Passport,
-                "id-card" => DocKind::IdCard,
-                "driving-licence" => DocKind::DrivingLicence,
-                "tax-number" => DocKind::TaxNumber,
-                "residence-permit" => DocKind::ResidencePermit,
-                "social-insurance" => DocKind::SocialInsurance,
+                "email" => DocKind::Email,
+                "did-web" => {
+                    if !n.starts_with("did:web:") {
+                        return Err(usage(format!(
+                            "--docs: did-web must carry its prefix, did:web:… (got {n:?})"
+                        )));
+                    }
+                    DocKind::DidWeb
+                }
                 other => {
                     return Err(usage(format!(
-                        "--docs: unknown kind {other} (passport, id-card, driving-licence, \
-                         tax-number, residence-permit, social-insurance)"
+                        "--docs: unknown kind {other} (email, did-web)"
                     )))
                 }
             };
+            if n.is_empty() {
+                return Err(usage("--docs: empty holder"));
+            }
             Ok((kind, n.to_owned()))
         })
         .collect()
@@ -1111,9 +1120,11 @@ fn issue_label_command(f: &BTreeMap<String, String>) -> Result<(), Failure> {
 }
 
 /// `issue-anchor put`: the issuer puts the anchor of a `bare` handed over
-/// against `--docs`. `issue-anchor check`: the next issuer asks whether
-/// these documents already had a free `bare` of this release and version —
-/// `paid` if any anchor matches, `free` if none does.
+/// against `--docs` (the holder: an e-mail or a `did:web`). `issue-anchor
+/// check`: the next issuer asks whether this holder already had a `bare` of
+/// this release and version — `refused` if any anchor matches (the beta
+/// repeats neither free nor for payment, owner's decision 27.10), `free` if
+/// none does.
 fn issue_anchor_command(args: &[String]) -> Result<(), Failure> {
     use ksg_verify_v2::issue_anchor::{open, period_of, scope, seal, BareCheckKey, ANCHOR_TAG};
     let sub = args.first().map_or("", String::as_str);
@@ -1242,7 +1253,10 @@ fn issue_anchor_command(args: &[String]) -> Result<(), Failure> {
                 };
                 seen += 1;
                 if a.matches(&key.for_period(year), &sc, &docs_ref)? {
-                    println!("paid       a free bare of this release and version was already handed over");
+                    println!(
+                        "refused    a bare of this release and version was already issued to \
+                         this holder (beta: no repeat, no payment)"
+                    );
                     // The issuance label as the chain keeps it (`Bare_v2_spec`
                     // §5, K9): who issued and when; read with the issuer's key.
                     println!(

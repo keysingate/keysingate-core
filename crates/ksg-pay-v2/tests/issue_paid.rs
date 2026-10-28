@@ -17,7 +17,7 @@ const NOW: u64 = 1_760_000_100;
 fn a_repeat_bare_is_handed_over_only_after_one_accepted_payment() {
     let key = BareCheckKey::new([7; 32]).for_period("2026");
     let scope = issue_anchor::scope("bare-2026-10", "2.0.0");
-    let anna = [(DocKind::Passport, "AB 123456")];
+    let anna = [(DocKind::Email, "alice@example.com")];
     let till = Till::base_sepolia(Address::parse(ISSUER).unwrap());
     let price = Price {
         minor: 100_000, // $0.10
