@@ -1,0 +1,12 @@
+{
+  "listen": "127.0.0.1:8640",
+  "audience": "https://desk.keysingate.example/v1",
+  "state": "/var/lib/ksg-service",
+  "cluster": "mainnet-beta",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "issuer_keys": "/etc/ksg-service/issuer-keys.json",
+  "max_standing_age_s": 86400,
+  "legal_checkers": [],
+  "holders": [],
+  "workers": 4
+}

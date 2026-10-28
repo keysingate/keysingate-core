@@ -14,6 +14,8 @@
 //! | `POST /v1/anchor` | a holder, signed | `{container, kind, subject, memo}` → `{job}` |
 //! | `GET /v1/anchor/{job}` | the holder, signed | → `{state, attempts, last_error, attestation, anchor}` |
 //! | `POST /v1/notices` | the holder, signed | `{container}` → `{notices, dropped}` |
+//! | `POST /v1/bare/orchestrator/challenge` | anyone | `{did_web}` → `{id, code}` — for one proof, ten minutes |
+//! | `POST /v1/bare/orchestrator/proof` | the domain's key | `{id, signature}` → `{state, number}` (the code signed by the `did.json` key) |
 //!
 //! Errors answer `{error}` with a status: 400 malformed, 401 unsigned or a
 //! stale or replayed signature, 403 refused by path A, 404 unknown, 409 a
@@ -182,6 +184,8 @@ pub struct Shared {
     rpc: Box<dyn Rpc + Send + Sync>,
     legal: Vec<String>,
     bare: Mutex<BareLedger>,
+    /// Pending orchestrator challenges (этап 9: in-memory, ten minutes each).
+    orch: Mutex<OrchLedger>,
 }
 
 /// A running service.
@@ -300,7 +304,6 @@ impl Shared {
 /// without opening a network port.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Reply(pub u16, pub serde_json::Value);
-
 impl Reply {
     /// The HTTP status code.
     #[must_use]
@@ -318,15 +321,26 @@ fn err(code: u16, msg: impl Into<String>) -> Reply {
     Reply(code, json!({"error": msg.into()}))
 }
 
-/// One pending `bare` issuance request (этап 1, in-memory).
-#[allow(dead_code)] // `code` is checked by the verify step (этап 2); stored now.
+/// One pending `bare` issuance request (этапы 1+6, in-memory).
+///
+/// `expect` is the `holder_hmac` of the applicant's contact: the contact
+/// value itself is never stored, even in memory. `None` when the HMAC key
+/// was unavailable at `start` — the `mail` step then cannot match and
+/// refuses with 503.
 struct BareEntry {
     code: String,
     expires_ms: u64,
+    expect: Option<[u8; 32]>,
 }
 
 /// How long a `bare` request stays pending: thirty minutes.
 pub const BARE_TTL_MS: u64 = 30 * 60 * 1000;
+
+/// How long an orchestrator challenge stays pending: ten minutes.
+pub const ORCH_TTL_MS: u64 = 10 * 60 * 1000;
+
+/// The `did.json` address of a bare `did:web:<host>` (no path segments).
+pub const DID_JSON_WELL_KNOWN: &str = ".well-known/did.json";
 
 /// Where the applicant sends the six-digit code for manual verification.
 const BARE_SEND_TO: &str = "verify@keysingate.com";
@@ -351,6 +365,9 @@ pub struct BareLedger {
     ///
     /// Returns the request id and the six-digit code, or why the contact is
     /// refused. The contact value itself is never logged nor echoed back.
+    /// `hmac_key` is the service HMAC secret; `None` keeps the request
+    /// pending but unmatchable (the `mail` step answers 503 until the key
+    /// is configured).
     ///
     /// # Errors
     ///
@@ -360,6 +377,7 @@ pub struct BareLedger {
         email: Option<&str>,
         did_web: Option<&str>,
         now: u64,
+        hmac_key: Option<&[u8]>,
     ) -> Result<(String, String), String> {
         let ok = match (email, did_web) {
             (Some(e), None) => valid_email(e),
@@ -369,6 +387,11 @@ pub struct BareLedger {
         if !ok {
             return Err("email or did_web: malformed contact".to_owned());
         }
+        let contact: &str = match (email, did_web) {
+            (Some(e), None) => e,
+            (None, Some(d)) => d,
+            _ => return Err("email or did_web: malformed contact".to_owned()),
+        };
         let mut id_raw = [0u8; 16];
         let mut code_raw = [0u8; 4];
         OsRng
@@ -382,22 +405,46 @@ pub struct BareLedger {
         let mut i = code.len();
         while i > 0 {
             i -= 1;
-            code[i] = b'0' + (rest % 10) as u8;
+            if let Some(slot) = code.get_mut(i) {
+                *slot = b'0' + (rest % 10) as u8;
+            }
             rest /= 10;
         }
         let code = String::from_utf8_lossy(&code).into_owned();
+        let expect = hmac_key.map(|k| crate::bare_db::holder_hmac(k, contact));
         self.entries.retain(|_, e| e.expires_ms > now);
         self.entries.insert(id.clone(), BareEntry {
             expires_ms: now.saturating_add(BARE_TTL_MS),
             code: code.clone(),
+            expect,
         });
         Ok((id, code))
     }
 
-    /// The state of a request id: `"pending"` while it is known and fresh.
+    /// The state of a request id: `"pending"` while it is known and fresh,
+    /// `"issued"` once the `mail` step wrote the row.
     pub fn state(&mut self, id: &str, now: u64) -> Option<&'static str> {
         self.entries.retain(|_, e| e.expires_ms > now);
         self.entries.get(id).map(|_| "pending")
+    }
+
+    /// Takes a pending request whose expected holder hash and six-digit code
+    /// both match: the request is consumed (one code works once).
+    ///
+    /// `holder` is compared in constant time. An expired or unknown id, or a
+    /// wrong code or holder, returns `None` without telling which part failed.
+    pub fn take_match(&mut self, holder: &[u8; 32], code: &str, now: u64) -> Option<String> {
+        self.entries.retain(|_, e| e.expires_ms > now);
+        let id = self
+            .entries
+            .iter()
+            .find(|(_, e)| {
+                let Some(expect) = e.expect else { return false };
+                constant_eq(&expect, holder) && e.code == code
+            })
+            .map(|(id, _)| id.clone())?;
+        self.entries.remove(&id);
+        Some(id)
     }
 
     /// How many certificates were issued (этап 1: always zero, no database).
@@ -405,6 +452,86 @@ pub struct BareLedger {
     pub fn issued(&self) -> u64 {
         0
     }
+}
+
+/// One pending orchestrator challenge (этап 9, in-memory).
+///
+/// `did_web` is the domain's full `did:web:...` identifier; `code` is the
+/// random challenge to sign. The record itself carries no key material.
+struct OrchEntry {
+    did_web: String,
+    code: String,
+    expires_ms: u64,
+}
+
+/// In-memory ledger of pending orchestrator challenges (этап 9).
+///
+/// The store keeps only the challenge each domain must answer, each for
+/// [`ORCH_TTL_MS`]: one challenge works once.
+#[derive(Default)]
+pub struct OrchLedger {
+    entries: HashMap<String, OrchEntry>,
+}
+
+impl OrchLedger {
+    /// Creates an empty ledger.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+
+    /// Starts one challenge for a `did:web` domain: returns the id and the
+    /// random code the domain's `did.json` key must sign.
+    ///
+    /// # Errors
+    ///
+    /// The contact is not a well-formed `did:web`, or there is no randomness.
+    pub fn start(&mut self, did_web: &str, now: u64) -> Result<(String, String), String> {
+        if !valid_did_web(did_web) {
+            return Err("did_web: malformed contact".to_owned());
+        }
+        let mut id_raw = [0u8; 16];
+        let mut code_raw = [0u8; 32];
+        OsRng
+            .try_fill_bytes(&mut id_raw)
+            .and_then(|()| OsRng.try_fill_bytes(&mut code_raw))
+            .map_err(|_| "no randomness".to_owned())?;
+        let id = hex::encode(id_raw);
+        let code = hex::encode(code_raw);
+        self.entries.retain(|_, e| e.expires_ms > now);
+        self.entries.insert(id.clone(), OrchEntry {
+            did_web: did_web.to_owned(),
+            code: code.clone(),
+            expires_ms: now.saturating_add(ORCH_TTL_MS),
+        });
+        Ok((id, code))
+    }
+
+    /// Takes a pending challenge by id: consumed whether or not the proof
+    /// verifies (one challenge works once). Returns the `did:web` it was
+    /// issued for and the code it carries.
+    pub fn take(&mut self, id: &str, now: u64) -> Option<(String, String)> {
+        self.entries.retain(|_, e| e.expires_ms > now);
+        self.entries
+            .remove(id)
+            .map(|e| (e.did_web, e.code))
+    }
+}
+
+/// Compares two hashes without early exit: the timing does not tell how
+/// many bytes matched.
+fn constant_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
+    let mut diff = 0u8;
+    let mut i = 0;
+    while i < 32 {
+        if let (Some(x), Some(y)) = (a.get(i), b.get(i)) {
+            diff |= x ^ y;
+        }
+        i += 1;
+    }
+    diff == 0
 }
 
 /// A `did:web` contact reads `did:web:<host>[:extra...]`: letters, digits and
@@ -571,6 +698,9 @@ impl Shared {
                 Err(r) => r,
             },
             ("POST", "/v1/bare/start") => self.bare_start(&body, now),
+            ("POST", "/v1/bare/mail") => self.bare_mail(&body, now),
+            ("POST", "/v1/bare/orchestrator/challenge") => self.orch_challenge(&body, now),
+            ("POST", "/v1/bare/orchestrator/proof") => self.orch_proof(&body, now),
             ("GET", p) if p.starts_with("/v1/bare/status/") => {
                 self.bare_status(p.trim_start_matches("/v1/bare/status/"), now)
             }
@@ -804,12 +934,467 @@ impl Shared {
             Err(e) => return err(400, format!("body: {e}")),
         };
         let mut ledger = lock(&self.bare);
-        match ledger.start(b.email.as_deref(), b.did_web.as_deref(), now) {
+        match ledger.start(
+            b.email.as_deref(),
+            b.did_web.as_deref(),
+            now,
+            crate::bare_db::load_hmac_key().ok().as_deref().map(|k| k.as_slice()),
+        ) {
             Ok((id, code)) => Reply(200, json!({"id": id, "code": code, "send_to": BARE_SEND_TO})),
             Err(e) => err(400, e),
         }
     }
 
+    /// The `mail` intake (этап 6, owner mail only).
+    ///
+    /// The Email Worker posts the raw message it received on the verify
+    /// address plus the pending request id: `{"id", "raw"}` where `raw` is
+    /// the full RFC5322 message. The service parses From and the six-digit
+    /// code (Subject first, then the text body), checks that exactly one
+    /// pending request matches both the holder hash of the From address and
+    /// the code, and only then verifies DKIM of the From domain over the raw
+    /// message (`mail-auth` against the network DNS). On success it inserts
+    /// the issuance row and consumes the request; a consumed code never
+    /// works twice. Contact values are validated and never logged.
+    fn bare_mail(&self, body: &[u8], now: u64) -> Reply {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Body {
+            id: String,
+            raw: String,
+        }
+        let b: Body = match serde_json::from_slice(body) {
+            Ok(b) => b,
+            Err(e) => return err(400, format!("body: {e}")),
+        };
+        if b.id.is_empty() || b.id.len() > 64 || b.raw.len() > MAX_BODY {
+            return err(400, "id or raw: malformed");
+        }
+        let Some((from, code)) = parse_bare_mail(&b.raw) else {
+            return err(400, "from or code: not found");
+        };
+        if !valid_email(&from) {
+            return err(400, "from: malformed contact");
+        }
+        let key = match crate::bare_db::load_hmac_key() {
+            Ok(k) => k,
+            Err(_) => return err(503, "hmac key: not configured"),
+        };
+        let holder = crate::bare_db::holder_hmac(key.as_slice(), &from);
+        let matched = {
+            let mut ledger = lock(&self.bare);
+            ledger.take_match(&holder, &code, now)
+        };
+        let Some(matched) = matched else {
+            return err(404, "no such pending request");
+        };
+        if matched != b.id {
+            return err(404, "no such pending request");
+        }
+        if !dkim_passes(&b.raw, &from) {
+            return err(403, "dkim: no passing signature for from domain");
+        }
+        match insert_bare_issuance(&from) {
+            Ok(number) => Reply(200, json!({"state": "issued", "number": number})),
+            Err(e) => e,
+        }
+    }
+
+    /// Issues one orchestrator challenge (этап 9).
+    ///
+    /// The caller names the domain's `did:web` identifier; the answer is the
+    /// challenge id and the random code the domain's `did.json` key must
+    /// sign. Contact values are validated and never logged.
+    fn orch_challenge(&self, body: &[u8], now: u64) -> Reply {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Body {
+            did_web: String,
+        }
+        let b: Body = match serde_json::from_slice(body) {
+            Ok(b) => b,
+            Err(e) => return err(400, format!("body: {e}")),
+        };
+        if b.did_web.len() > 512 {
+            return err(400, "did_web: malformed contact");
+        }
+        let mut ledger = lock(&self.orch);
+        match ledger.start(&b.did_web, now) {
+            Ok((id, code)) => Reply(200, json!({"id": id, "code": code})),
+            Err(e) => err(400, e),
+        }
+    }
+
+    /// Checks one orchestrator proof (этап 9).
+    ///
+    /// The caller answers the challenge id with the code signed by the key
+    /// named in the domain's `did.json`: `{"id", "signature"}` where
+    /// `signature` is the base64url Ed25519 signature over the challenge code.
+    /// On success the service inserts the issuance row against the domain
+    /// hash (one free `bare` per domain per release, §migration 001).
+    /// The challenge is consumed whether or not the proof verifies. The
+    /// worker identity comes from the environment: `KSG_BARE_WORKER_DOMAIN`
+    /// must equal the challenge domain, so a stolen worker secret cannot
+    /// issue for another domain. Contact values are validated and never
+    /// logged.
+    fn orch_proof(&self, body: &[u8], now: u64) -> Reply {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Body {
+            id: String,
+            signature: String,
+        }
+        let b: Body = match serde_json::from_slice(body) {
+            Ok(b) => b,
+            Err(e) => return err(400, format!("body: {e}")),
+        };
+        if b.id.is_empty() || b.id.len() > 64 || b.signature.is_empty() || b.signature.len() > 128 {
+            return err(400, "id or signature: malformed");
+        }
+        let sig: [u8; 64] = match B64.decode(&b.signature).ok().and_then(|v| v.try_into().ok()) {
+            Some(s) => s,
+            None => return err(400, "signature: not an Ed25519 signature"),
+        };
+        let Some((did_web, code)) = lock(&self.orch).take(&b.id, now) else {
+            return err(404, "no such pending challenge");
+        };
+        let domain = match crate::bare_db::did_web_domain(&did_web) {
+            Some(d) => d.to_owned(),
+            None => return err(400, "did_web: malformed contact"),
+        };
+        let worker = match std::env::var(BARE_WORKER_DOMAIN_ENV) {
+            Ok(w) if !w.is_empty() && w.len() <= 253 => w.to_lowercase(),
+            _ => return err(503, "worker: not configured"),
+        };
+        if domain.to_lowercase() != worker {
+            return err(403, "worker: not this domain");
+        }
+        let key = match orch_key(&did_web) {
+            Ok(k) => k,
+            Err(e) => return e,
+        };
+        if key
+            .verify_strict(code.as_bytes(), &EdSignature::from_bytes(&sig))
+            .is_err()
+        {
+            return err(403, "proof: bad signature");
+        }
+        match insert_bare_orch_issuance(&did_web, &domain) {
+            Ok(number) => Reply(200, json!({"state": "issued", "number": number})),
+            Err(e) => e,
+        }
+    }
+}
+
+/// How the `mail` step reaches Postgres: connection string in
+/// `KSG_BARE_DATABASE_URL`, current release id in `KSG_BARE_RELEASE`.
+pub const BARE_DATABASE_URL_ENV: &str = "KSG_BARE_DATABASE_URL";
+/// The current `bare` release id (row in `releases`).
+pub const BARE_RELEASE_ENV: &str = "KSG_BARE_RELEASE";
+/// The domain this worker may issue orchestrator `bare` for (этап 9).
+///
+/// The proof step checks the challenge's domain against this value: a worker
+/// configured for one domain cannot spend its secret on another.
+pub const BARE_WORKER_DOMAIN_ENV: &str = "KSG_BARE_WORKER_DOMAIN";
+/// The `HTTP(S)` timeout for fetching the domain's `did.json`, seconds.
+pub const BARE_DID_TIMEOUT_S: u64 = 10;
+
+/// Inserts one owner issuance row: smallest free number of the current
+/// release against the holder hash of the From address (owner = no domain).
+///
+/// Contact values never leave this function toward logs; only the outcome
+/// code is returned.
+///
+/// # Errors (as replies)
+///
+/// 503 when the database or the HMAC key is not configured, 409 when this
+/// holder or the release is already spent, 500 on any other database failure.
+fn insert_bare_issuance(from: &str) -> Result<i32, Reply> {
+    let url = std::env::var(BARE_DATABASE_URL_ENV)
+        .map_err(|_| err(503, "database: not configured"))?;
+    let release = std::env::var(BARE_RELEASE_ENV).unwrap_or_else(|_| "0".to_owned());
+    if release.is_empty() || release.len() > 128 {
+        return Err(err(500, "release: misconfigured"));
+    }
+    let key = crate::bare_db::load_hmac_key().map_err(|_| err(503, "hmac key: not configured"))?;
+    let holder = crate::bare_db::holder_hmac(key.as_slice(), from);
+    let mut client =
+        postgres::Client::connect(&url, postgres::NoTls).map_err(|_| err(503, "database: down"))?;
+    let number = crate::bare_db::next_free_number(&mut client, &release).map_err(|e| {
+        use crate::bare_db::BareDbError as E;
+        match e {
+            E::ReleaseFull | E::AlreadyIssued => err(409, "already issued"),
+            E::UnknownRelease | E::BadSize => err(500, "release: misconfigured"),
+            E::Db(_) => err(500, "database: failed"),
+            E::Env | E::KeyFile => err(503, "hmac key: not configured"),
+        }
+    })?;
+    let Some(number) = number else {
+        return Err(err(409, "already issued"));
+    };
+    crate::bare_db::insert_issuance(&mut client, &release, number, &holder, None).map_err(|e| {
+        use crate::bare_db::BareDbError as E;
+        match e {
+            E::AlreadyIssued => err(409, "already issued"),
+            E::Db(_) => err(500, "database: failed"),
+            E::Env | E::KeyFile => err(503, "hmac key: not configured"),
+            E::UnknownRelease | E::BadSize | E::ReleaseFull => {
+                err(500, "release: misconfigured")
+            }
+        }
+    })
+}
+
+/// Inserts one orchestrator issuance row: the smallest free number of the
+/// current release against the holder hash of the `did:web` value and the
+/// domain hash of its host (one free `bare` per domain per release).
+///
+/// Contact values never leave this function toward logs; only the outcome
+/// code is returned.
+///
+/// # Errors (as replies)
+///
+/// 503 when the database or the HMAC key is not configured, 409 when this
+/// holder, this domain, or the release is already spent, 500 on any other
+/// database failure.
+fn insert_bare_orch_issuance(did_web: &str, domain: &str) -> Result<i32, Reply> {
+    let url = std::env::var(BARE_DATABASE_URL_ENV)
+        .map_err(|_| err(503, "database: not configured"))?;
+    let release = std::env::var(BARE_RELEASE_ENV).unwrap_or_else(|_| "0".to_owned());
+    if release.is_empty() || release.len() > 128 {
+        return Err(err(500, "release: misconfigured"));
+    }
+    let key = crate::bare_db::load_hmac_key().map_err(|_| err(503, "hmac key: not configured"))?;
+    let holder = crate::bare_db::holder_hmac(key.as_slice(), did_web);
+    let dom_hash = crate::bare_db::domain_hmac(key.as_slice(), domain);
+    let mut client =
+        postgres::Client::connect(&url, postgres::NoTls).map_err(|_| err(503, "database: down"))?;
+    let number = crate::bare_db::next_free_number(&mut client, &release).map_err(|e| {
+        use crate::bare_db::BareDbError as E;
+        match e {
+            E::ReleaseFull | E::AlreadyIssued => err(409, "already issued"),
+            E::UnknownRelease | E::BadSize => err(500, "release: misconfigured"),
+            E::Db(_) => err(500, "database: failed"),
+            E::Env | E::KeyFile => err(503, "hmac key: not configured"),
+        }
+    })?;
+    let Some(number) = number else {
+        return Err(err(409, "already issued"));
+    };
+    crate::bare_db::insert_issuance(&mut client, &release, number, &holder, Some(&dom_hash)).map_err(
+        |e| {
+            use crate::bare_db::BareDbError as E;
+            match e {
+                E::AlreadyIssued => err(409, "already issued"),
+                E::Db(_) => err(500, "database: failed"),
+                E::Env | E::KeyFile => err(503, "hmac key: not configured"),
+                E::UnknownRelease | E::BadSize | E::ReleaseFull => {
+                    err(500, "release: misconfigured")
+                }
+            }
+        },
+    )
+}
+
+/// The address of a domain's `did.json` (этап 9).
+///
+/// `did:web:<host>` (no path) reads `https://<host>/.well-known/did.json`;
+/// `did:web:<host>:<path...>` reads `https://<host>/<path...>/did.json`.
+/// Percent-encoded segments stay encoded: what the domain published under
+/// that name is what is read. Returns `None` on a malformed identifier or
+/// an over-long URL.
+fn did_json_url(did_web: &str) -> Option<String> {
+    const PREFIX: &str = "did:web:";
+    let rest = did_web.strip_prefix(PREFIX)?;
+    if rest.is_empty() || rest.len() > 512 || !valid_did_web(did_web) {
+        return None;
+    }
+    let mut parts = rest.split(':');
+    let host = parts.next()?;
+    if host.is_empty() || host.len() > 253 {
+        return None;
+    }
+    let mut url = String::from("https://");
+    url.push_str(host);
+    url.push('/');
+    let tail: Vec<&str> = parts.collect();
+    if tail.is_empty() {
+        url.push_str(DID_JSON_WELL_KNOWN);
+    } else {
+        for (i, seg) in tail.iter().enumerate() {
+            if i > 0 {
+                url.push('/');
+            }
+            url.push_str(seg);
+        }
+        url.push_str("/did.json");
+    }
+    if url.len() > 2048 {
+        return None;
+    }
+    Some(url)
+}
+
+/// The domain's verification key from its `did.json` (этап 9).
+///
+/// Fetches the document over HTTPS (`did_json_url`) with a bounded timeout,
+/// takes the first `verificationMethod` entry carrying an Ed25519 key in
+/// `publicKeyMultibase` (base58btc `z` + 32 bytes, multicodec `0xed 0x01`),
+/// and returns it as a [`VerifyingKey`]. Only HTTPS is ever fetched; the
+/// HTTP status must be 200 and the body must fit in [`MAX_BODY`].
+///
+/// # Errors (as replies)
+///
+/// 503 when the document does not read (network, timeout, status), 500 when
+/// it reads but names no usable Ed25519 key.
+fn orch_key(did_web: &str) -> Result<VerifyingKey, Reply> {
+    let url = did_json_url(did_web).ok_or_else(|| err(400, "did_web: malformed contact"))?;
+    let agent: ureq::Agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(BARE_DID_TIMEOUT_S))
+        .build();
+    let body = agent
+        .get(&url)
+        .call()
+        .map_err(|_| err(503, "did.json: not reachable"))
+        .and_then(|resp| {
+            if resp.status() != 200 {
+                return Err(err(503, "did.json: not reachable"));
+            }
+            resp.into_string()
+                .map_err(|_| err(503, "did.json: not reachable"))
+        })?;
+    if body.len() > MAX_BODY {
+        return Err(err(503, "did.json: too large"));
+    }
+    did_key(&body).ok_or_else(|| err(500, "did.json: no Ed25519 key"))
+}
+
+/// The first Ed25519 key of a `did.json` document.
+///
+/// Reads `verificationMethod[]`: the first entry whose `publicKeyMultibase`
+/// decodes from base58btc `z...` to multicodec `0xed 0x01` + 32 key bytes.
+/// Nothing from the document is logged.
+fn did_key(body: &str) -> Option<VerifyingKey> {
+    let doc: serde_json::Value = serde_json::from_str(body).ok()?;
+    let methods = doc.get("verificationMethod")?.as_array()?;
+    for m in methods {
+        let mb = m.get("publicKeyMultibase")?.as_str()?;
+        let raw = mb.strip_prefix('z')?;
+        // `bs58 0.5` decodes without a length cap; reject absurd inputs up
+        // front (a `z` + 44 chars is the honest shape).
+        if raw.len() > 128 {
+            continue;
+        }
+        let decoded = bs58::decode(raw).into_vec().ok()?;
+        let bytes: [u8; 34] = decoded.try_into().ok()?;
+        if bytes[0] != 0xed || bytes[1] != 0x01 {
+            continue;
+        }
+        let key: [u8; 32] = bytes[2..].try_into().ok()?;
+        if let Ok(k) = VerifyingKey::from_bytes(&key) {
+            return Some(k);
+        }
+    }
+    None
+}
+
+/// Parses a raw RFC5322 message: the From address and the first six-digit
+/// code from the Subject, else from the first text body part.
+///
+/// Returns `None` when the message does not parse, has no usable From
+/// address, or names no six ASCII digits in a row. The contact value is
+/// returned for hashing only — never logged.
+fn parse_bare_mail(raw: &str) -> Option<(String, String)> {
+    let msg = mail_parser::MessageParser::default().parse(raw.as_bytes())?;
+    let from = match msg.from()? {
+        mail_parser::Address::List(list) => list.first()?.address.as_deref()?.trim().to_owned(),
+        mail_parser::Address::Group(groups) => {
+            groups.first()?.addresses.first()?.address.as_deref()?.trim().to_owned()
+        }
+    };
+    if from.is_empty() || from.len() > 254 {
+        return None;
+    }
+    let code = first_six_digits(msg.subject().unwrap_or_default())
+        .or_else(|| {
+            let mut found = None;
+            for i in 0..msg.text_body_count() {
+                let part = msg.body_text(i)?;
+                if let Some(c) = first_six_digits(&part) {
+                    found = Some(c);
+                    break;
+                }
+            }
+            found
+        })?;
+    Some((from, code))
+}
+
+/// The first run of exactly six ASCII digits bounded by non-digits.
+fn first_six_digits(s: &str) -> Option<String> {
+    let bytes = s.as_bytes();
+    let mut i: usize = 0;
+    while i.saturating_add(6) <= bytes.len() {
+        let head_ok = i == 0
+            || !matches!(bytes.get(i.saturating_sub(1)), Some(b) if b.is_ascii_digit());
+        let tail_ok =
+            !matches!(bytes.get(i.saturating_add(6)), Some(b) if b.is_ascii_digit());
+        let all_digits = bytes
+            .get(i..i.saturating_add(6))
+            .is_some_and(|w| w.iter().all(|b| b.is_ascii_digit()));
+        if all_digits && head_ok && tail_ok {
+            return s.get(i..i.saturating_add(6)).map(str::to_owned);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Whether the raw message carries a passing DKIM signature whose `d=`
+/// domain equals the domain of the From address.
+///
+/// Verification runs on a throwaway single-threaded runtime in a worker
+/// thread: `mail-auth` is async and DNS-backed, the service threads are
+/// blocking `tiny_http` workers. Only `Pass` counts; `Neutral` (expired,
+/// body-hash mismatch), `Fail`, and DNS errors all refuse. No message
+/// content is logged.
+fn dkim_passes(raw: &str, from: &str) -> bool {
+    let domain = from.rsplit('@').next().unwrap_or_default().to_lowercase();
+    if domain.is_empty() || !domain.contains('.') {
+        return false;
+    }
+    let raw = raw.to_owned();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build();
+        let Ok(rt) = rt else { return false };
+        rt.block_on(async move {
+            let authenticator = match mail_auth::MessageAuthenticator::new_cloudflare() {
+                Ok(a) => a,
+                Err(_) => return false,
+            };
+            let parsed = match mail_auth::AuthenticatedMessage::parse(raw.as_bytes()) {
+                Some(m) => m,
+                None => return false,
+            };
+            authenticator
+                .verify_dkim(&parsed)
+                .await
+                .iter()
+                .any(|o| *o.result() == mail_auth::DkimResult::Pass && dkim_domain(o) == domain)
+        })
+    })
+    .join()
+    .unwrap_or(false)
+}
+
+/// The `d=` domain of a DKIM result's signature, lowercased.
+fn dkim_domain(o: &mail_auth::DkimOutput<'_>) -> String {
+    o.signature().map(|s| s.d.to_lowercase()).unwrap_or_default()
+}
+
+impl Shared {
     /// The state of a `bare` request id: `{"state":"pending"}` or 404.
     fn bare_status(&self, id: &str, now: u64) -> Reply {
         let mut ledger = lock(&self.bare);
@@ -923,16 +1508,22 @@ impl Shared {
             rpc: Box::new(NoRpc),
             legal: Vec::new(),
             bare: Mutex::new(BareLedger::new()),
+            orch: Mutex::new(OrchLedger::new()),
         })
     }
 
     /// Drives one `bare` route in-process: `POST /v1/bare/start`,
     /// `GET /v1/bare/status/{id}`, `GET /v1/bare/count`.
+    /// `POST /v1/bare/mail` needs Postgres + DNS, so it is not on the
+    /// in-process route: it answers 503 without the database configured.
     ///
     /// Anything else is a 404. Contact values are never logged.
     pub fn bare_route(&self, method: &str, path: &str, body: &[u8], now: u64) -> Reply {
         match (method, path) {
             ("POST", "/v1/bare/start") => self.bare_start(body, now),
+            ("POST", "/v1/bare/mail") => self.bare_mail(body, now),
+            ("POST", "/v1/bare/orchestrator/challenge") => self.orch_challenge(body, now),
+            ("POST", "/v1/bare/orchestrator/proof") => self.orch_proof(body, now),
             ("GET", p) if p.starts_with("/v1/bare/status/") => {
                 self.bare_status(p.trim_start_matches("/v1/bare/status/"), now)
             }
@@ -1062,6 +1653,7 @@ pub fn start(
         seen: Mutex::new(BTreeMap::new()),
         rpc,
         bare: Mutex::new(BareLedger::new()),
+        orch: Mutex::new(OrchLedger::new()),
     });
     let stop = Arc::new(AtomicBool::new(false));
     let mut threads = Vec::new();

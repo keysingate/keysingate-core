@@ -1,0 +1,34 @@
+[Unit]
+Description=Keysingate bare issuance service (ksg-service-v2)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ksg-bare
+Group=ksg-bare
+# The service reads its JSON config from --config; all secrets arrive
+# via the environment file, never via CLI args (they leak into ps).
+# /etc/ksg-service/bare.env holds the bare issuance settings:
+#   KSG_BARE_DATABASE_URL  - Postgres connection string (libpq format)
+#   KSG_BARE_RELEASE       - current release id (row in `releases`, e.g. "0")
+#   KSG_BARE_HMAC_KEY_FILE - path to the HMAC secret file (chmod 0400)
+#   KSG_BARE_WORKER_DOMAIN - this worker's domain (orchestrator proof only)
+ExecStart=/usr/local/bin/ksg-service --config /etc/ksg-service/service.bare.json
+EnvironmentFile=-/etc/ksg-service/bare.env
+Restart=on-failure
+RestartSec=5
+# The state directory holds desk.json / registry.json / holder-*.json;
+# the process replaces them atomically, so the dir must be writable.
+StateDirectory=ksg-service
+StateDirectoryMode=0700
+# The HMAC key file (KSG_BARE_HMAC_KEY_FILE) must be readable by this user
+# and by nobody else: chmod 0400, chown ksg-bare:ksg-bare.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ksg-service
+
+[Install]
+WantedBy=multi-user.target
