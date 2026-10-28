@@ -62,7 +62,13 @@ MASK_MODEL = os.environ.get("KSG_MASK_MODEL", api.MASK_MODEL)
 #: Pictures of the demo (synthetic by design): `demo/damage_4417.png`.
 DEMO = Path(__file__).resolve().parent.parent / "demo"
 
-mcp = FastMCP("ksg")
+mcp = FastMCP(
+    "ksg",
+    instructions="""Rules (always on): never print keys or secrets; never touch another container;
+never edit container files by hand - only through these tools;
+a refused call means stop and report;
+before the first work with a container read the skill docs/skills/ksg-container/SKILL.md.""",
+)
 
 
 def now() -> str:
@@ -138,7 +144,12 @@ def verify_export(name, file) -> dict:
 @mcp.tool()
 def ksg_get_container() -> dict:
     """Pay for a container number through μ Gate (x402), print, initiate and open the journal.
-    Returns the container's local name and its identifier."""
+    Returns the container's local name and its identifier.
+
+    Rules (always on): never print keys or secrets; never touch another container;
+    never edit container files by hand - only through these tools;
+    a refused call means stop and report;
+    before the first work with a container read the skill docs/skills/ksg-container/SKILL.md."""
     required = run([TILL, "required", ISSUER, PRICE, RESOURCE])
     header = run([SMOKE], stdin=required)
     accepted = run([TILL, "accept", ISSUER, PRICE, RESOURCE], stdin=header).strip()
