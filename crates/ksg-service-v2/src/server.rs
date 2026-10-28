@@ -74,6 +74,7 @@ use ed25519_dalek::{Signature as EdSignature, VerifyingKey};
 use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use zeroize::Zeroizing;
 
 use ksg_container_v2::view::{AnchorRef, DisclosureRequest, ViewNotice};
 use ksg_core_v2::anchor::Attestation;
@@ -428,23 +429,38 @@ pub struct BareLedger {
         self.entries.get(id).map(|_| "pending")
     }
 
+    /// Finds a pending request whose expected holder hash and six-digit code
+    /// both match, without consuming it: use [`BareLedger::take_by_id`] to
+    /// consume only after out-of-band checks (DKIM) succeed, so a forged
+    /// message cannot burn someone else's request.
+    ///
+    /// `holder` is compared in constant time. An expired or unknown id, or a
+    /// wrong code or holder, returns `None` without telling which part failed.
+    pub fn find_match(&mut self, holder: &[u8; 32], code: &str, now: u64) -> Option<String> {
+        self.entries.retain(|_, e| e.expires_ms > now);
+        self.entries
+            .iter()
+            .find(|(_, e)| {
+                let Some(expect) = e.expect else { return false };
+                constant_eq(&expect, holder) && e.code == code
+            })
+            .map(|(id, _)| id.clone())
+    }
+
+    /// Consumes one pending request by id (one code works once). Returns the
+    /// id when it was still pending.
+    pub fn take_by_id(&mut self, id: &str) -> Option<String> {
+        self.entries.remove(id).map(|_| id.to_owned())
+    }
+
     /// Takes a pending request whose expected holder hash and six-digit code
     /// both match: the request is consumed (one code works once).
     ///
     /// `holder` is compared in constant time. An expired or unknown id, or a
     /// wrong code or holder, returns `None` without telling which part failed.
     pub fn take_match(&mut self, holder: &[u8; 32], code: &str, now: u64) -> Option<String> {
-        self.entries.retain(|_, e| e.expires_ms > now);
-        let id = self
-            .entries
-            .iter()
-            .find(|(_, e)| {
-                let Some(expect) = e.expect else { return false };
-                constant_eq(&expect, holder) && e.code == code
-            })
-            .map(|(id, _)| id.clone())?;
-        self.entries.remove(&id);
-        Some(id)
+        let id = self.find_match(holder, code, now)?;
+        self.take_by_id(&id)
     }
 
     /// How many certificates were issued (этап 1: always zero, no database).
@@ -698,7 +714,9 @@ impl Shared {
                 Err(r) => r,
             },
             ("POST", "/v1/bare/start") => self.bare_start(&body, now),
-            ("POST", "/v1/bare/mail") => self.bare_mail(&body, now),
+            ("POST", "/v1/bare/mail") => {
+                self.bare_mail(&body, now, header(rq, "authorization"))
+            }
             ("POST", "/v1/bare/orchestrator/challenge") => self.orch_challenge(&body, now),
             ("POST", "/v1/bare/orchestrator/proof") => self.orch_proof(&body, now),
             ("GET", p) if p.starts_with("/v1/bare/status/") => {
@@ -956,7 +974,14 @@ impl Shared {
     /// message (`mail-auth` against the network DNS). On success it inserts
     /// the issuance row and consumes the request; a consumed code never
     /// works twice. Contact values are validated and never logged.
-    fn bare_mail(&self, body: &[u8], now: u64) -> Reply {
+    fn bare_mail(&self, body: &[u8], now: u64, auth: Option<&str>) -> Reply {
+        // The Email Worker proves itself first: without its bearer secret no
+        // body is even parsed. The secret lives in a file named by
+        // `KSG_BARE_WORKER_SECRET_FILE`; the header is compared in constant
+        // time. Contact values are validated and never logged.
+        if !worker_secret_ok(auth) {
+            return err(401, "worker: unauthorized");
+        }
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Body {
@@ -983,7 +1008,7 @@ impl Shared {
         let holder = crate::bare_db::holder_hmac(key.as_slice(), &from);
         let matched = {
             let mut ledger = lock(&self.bare);
-            ledger.take_match(&holder, &code, now)
+            ledger.find_match(&holder, &code, now)
         };
         let Some(matched) = matched else {
             return err(404, "no such pending request");
@@ -993,6 +1018,12 @@ impl Shared {
         }
         if !dkim_passes(&b.raw, &from) {
             return err(403, "dkim: no passing signature for from domain");
+        }
+        {
+            let mut ledger = lock(&self.bare);
+            if ledger.take_by_id(&matched).is_none() {
+                return err(404, "no such pending request");
+            }
         }
         match insert_bare_issuance(&from) {
             Ok(number) => Reply(200, json!({"state": "issued", "number": number})),
@@ -1096,6 +1127,11 @@ pub const BARE_RELEASE_ENV: &str = "KSG_BARE_RELEASE";
 /// The proof step checks the challenge's domain against this value: a worker
 /// configured for one domain cannot spend its secret on another.
 pub const BARE_WORKER_DOMAIN_ENV: &str = "KSG_BARE_WORKER_DOMAIN";
+/// The file holding the Email Worker bearer secret (этап 17).
+///
+/// The worker sends `Authorization: Bearer <secret>`; the secret lives in a
+/// file named by this variable, never in code. Compared in constant time.
+pub const BARE_WORKER_SECRET_FILE_ENV: &str = "KSG_BARE_WORKER_SECRET_FILE";
 /// The `HTTP(S)` timeout for fetching the domain's `did.json`, seconds.
 pub const BARE_DID_TIMEOUT_S: u64 = 10;
 
@@ -1302,13 +1338,33 @@ fn did_key(body: &str) -> Option<VerifyingKey> {
 /// code from the Subject, else from the first text body part.
 ///
 /// Returns `None` when the message does not parse, has no usable From
-/// address, or names no six ASCII digits in a row. The contact value is
-/// returned for hashing only — never logged.
+/// address, or names no six ASCII digits in a row. A message with more
+/// than one `From` header or more than one address in `From` is also
+/// rejected (double-From tricks DKIM checks into validating the wrong
+/// identity). The contact value is returned for hashing only — never logged.
 fn parse_bare_mail(raw: &str) -> Option<(String, String)> {
     let msg = mail_parser::MessageParser::default().parse(raw.as_bytes())?;
+    if msg
+        .headers()
+        .iter()
+        .filter(|h| h.name == mail_parser::HeaderName::From)
+        .count()
+        != 1
+    {
+        return None;
+    }
     let from = match msg.from()? {
-        mail_parser::Address::List(list) => list.first()?.address.as_deref()?.trim().to_owned(),
+        mail_parser::Address::List(list) => {
+            if list.len() != 1 {
+                return None;
+            }
+            list.first()?.address.as_deref()?.trim().to_owned()
+        }
         mail_parser::Address::Group(groups) => {
+            let total: usize = groups.iter().map(|g| g.addresses.len()).sum();
+            if total != 1 {
+                return None;
+            }
             groups.first()?.addresses.first()?.address.as_deref()?.trim().to_owned()
         }
     };
@@ -1460,6 +1516,35 @@ impl Shared {
     }
 }
 
+/// Whether the `Authorization: Bearer <secret>` header matches the worker
+/// secret from the file named by [`BARE_WORKER_SECRET_FILE_ENV`].
+///
+/// The comparison runs in constant time over the secret length; an absent
+/// header, a non-`Bearer` scheme, an unreadable secret file, or an empty
+/// secret all refuse. Nothing secret is logged.
+fn worker_secret_ok(auth: Option<&str>) -> bool {
+    let given = match auth.and_then(|h| h.strip_prefix("Bearer ")) {
+        Some(g) if !g.is_empty() => g.as_bytes(),
+        _ => return false,
+    };
+    let path = match std::env::var(BARE_WORKER_SECRET_FILE_ENV) {
+        Ok(p) if !p.is_empty() => p,
+        _ => return false,
+    };
+    let secret: Zeroizing<Vec<u8>> = match std::fs::read(&path) {
+        Ok(b) if !b.is_empty() => Zeroizing::new(b),
+        _ => return false,
+    };
+    if given.len() != secret.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (a, b) in given.iter().zip(secret.iter()) {
+        diff |= a ^ b;
+    }
+    diff == 0
+}
+
 /// An [`Rpc`] that answers nothing: `bare_only` never touches the network.
 #[derive(Debug, Default)]
 struct NoRpc;
@@ -1514,14 +1599,31 @@ impl Shared {
 
     /// Drives one `bare` route in-process: `POST /v1/bare/start`,
     /// `GET /v1/bare/status/{id}`, `GET /v1/bare/count`.
-    /// `POST /v1/bare/mail` needs Postgres + DNS, so it is not on the
-    /// in-process route: it answers 503 without the database configured.
+    /// `POST /v1/bare/mail` needs the worker bearer secret plus Postgres +
+    /// DNS, so it is not on the in-process route: it answers 401 without the
+    /// secret, 503 without the database configured.
     ///
     /// Anything else is a 404. Contact values are never logged.
+    /// The `auth` argument carries the worker's `Authorization` header for
+    /// `/v1/bare/mail` (`None` for the other routes).
     pub fn bare_route(&self, method: &str, path: &str, body: &[u8], now: u64) -> Reply {
+        self.bare_route_auth(method, path, body, None, now)
+    }
+
+    /// Like [`Shared::bare_route`], with an explicit `Authorization` header
+    /// for `/v1/bare/mail`: the Email Worker proves itself with
+    /// `Bearer <secret>` (`worker_secret_ok`).
+    pub fn bare_route_auth(
+        &self,
+        method: &str,
+        path: &str,
+        body: &[u8],
+        auth: Option<&str>,
+        now: u64,
+    ) -> Reply {
         match (method, path) {
             ("POST", "/v1/bare/start") => self.bare_start(body, now),
-            ("POST", "/v1/bare/mail") => self.bare_mail(body, now),
+            ("POST", "/v1/bare/mail") => self.bare_mail(body, now, auth),
             ("POST", "/v1/bare/orchestrator/challenge") => self.orch_challenge(body, now),
             ("POST", "/v1/bare/orchestrator/proof") => self.orch_proof(body, now),
             ("GET", p) if p.starts_with("/v1/bare/status/") => {

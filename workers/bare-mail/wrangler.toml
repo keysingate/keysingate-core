@@ -1,0 +1,10 @@
+name = "ksg-bare-mail"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+# Service endpoint receiving the raw letter, e.g. "https://bare.keysingate.com/v1/bare/mail".
+KSG_SERVICE_MAIL_URL = "https://bare.example.com/v1/bare/mail"
+# Shared secret is NOT stored here: set via `wrangler secret put KSG_WORKER_SECRET`.
+# Email Routing (verify@keysingate.com -> this Worker) is configured in the
+# Cloudflare Dashboard under Email Routing -> Routing Rules, not here.
