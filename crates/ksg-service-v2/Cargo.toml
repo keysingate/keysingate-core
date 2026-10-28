@@ -26,6 +26,12 @@ base64.workspace = true
 bs58 = "0.5"
 rand_core = { version = "0.6", features = ["getrandom"] }
 tiny_http = { version = "0.12", optional = true }
+# Bare issuance (plan-bare C2): HMAC ids, raw-mail intake, DKIM check, Postgres store.
+hmac = "0.12"
+sha2.workspace = true
+mail-auth = { version = "=0.13.0", default-features = false, features = ["rust-crypto", "ring"] }
+mail-parser = "=0.9.4"
+postgres = "0.19"
 
 [features]
 # The server process and the HTTP client of a real node. The library alone —

@@ -34,6 +34,7 @@
 
 pub mod anchoring;
 pub mod auth;
+pub mod bare_db;
 pub mod desk;
 pub mod ladder;
 pub mod registry;
