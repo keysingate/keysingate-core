@@ -6,14 +6,14 @@ description: Work with a bare KeysInGate container through the ksg MCP tools —
 # ksg-container (bare) — draft
 
 Work with a `bare` container only through the `ksg` MCP tools
-(`core-v2/scripts/ksg_mcp.py`). Never open `internal/`.
+(`core-v2/scripts/ksg_mcp.py`).
 
 ## Rules (always)
 
 1. Never print keys, tokens, or secrets (no `MODEL_API_KEY`, no key files,
    no halves of the client key) — to stdout, logs, reports, or chat.
 2. Touch only your own container (the `name` your `ksg_get_container` returned).
-   чужі containers — never.
+   Other containers — never.
 3. Never edit container files by hand (`ksg-work/c-*/**`, `*.json`,
    `page-*.json`, `keys.json`). Only the `ksg_*` tools change them.
 4. A tool failure is a stop signal: stop, keep what is written, and report
