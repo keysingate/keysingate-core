@@ -58,7 +58,7 @@
 //! the lawyer's (`Resheniya_13.09` §7 p. 2), so the process writes the least
 //! an operator needs.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -71,7 +71,7 @@ use base64::Engine as _;
 use ed25519_dalek::{Signature as EdSignature, VerifyingKey};
 use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 
 use ksg_container_v2::view::{AnchorRef, DisclosureRequest, ViewNotice};
 use ksg_core_v2::anchor::Attestation;
@@ -167,7 +167,13 @@ struct Holder {
     sender: Mutex<Box<dyn ChainSender + Send>>,
 }
 
-struct Shared {
+/// The shared service state behind one HTTP port.
+///
+/// `pub` so integration tests drive the `bare` routes in-process
+/// ([`Shared::bare_only`], [`Shared::bare_route`]): no network port, no
+/// signer, no database. Contact values (email / `did:web`) are validated and
+/// never logged.
+pub struct Shared {
     cfg: Config,
     desk: Mutex<Desk>,
     registry: Mutex<ChainRegistry>,
@@ -175,6 +181,7 @@ struct Shared {
     seen: Mutex<BTreeMap<String, u64>>,
     rpc: Box<dyn Rpc + Send + Sync>,
     legal: Vec<String>,
+    bare: Mutex<BareLedger>,
 }
 
 /// A running service.
@@ -288,10 +295,175 @@ impl Shared {
 }
 
 /// An answer: a status and a JSON body.
-struct Reply(u16, Value);
+///
+/// `pub` so integration tests drive the `bare` routes directly, in-process,
+/// without opening a network port.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reply(pub u16, pub serde_json::Value);
+
+impl Reply {
+    /// The HTTP status code.
+    #[must_use]
+    pub fn status(&self) -> u16 {
+        self.0
+    }
+    /// The JSON body.
+    #[must_use]
+    pub fn body(&self) -> &serde_json::Value {
+        &self.1
+    }
+}
 
 fn err(code: u16, msg: impl Into<String>) -> Reply {
     Reply(code, json!({"error": msg.into()}))
+}
+
+/// One pending `bare` issuance request (этап 1, in-memory).
+#[allow(dead_code)] // `code` is checked by the verify step (этап 2); stored now.
+struct BareEntry {
+    code: String,
+    expires_ms: u64,
+}
+
+/// How long a `bare` request stays pending: thirty minutes.
+pub const BARE_TTL_MS: u64 = 30 * 60 * 1000;
+
+/// Where the applicant sends the six-digit code for manual verification.
+const BARE_SEND_TO: &str = "verify@keysingate.com";
+
+/// In-memory ledger of pending `bare` requests (этап 1: no database).
+///
+/// `issued` stays zero until этап 2 wires a database; the store keeps only
+/// pending requests, each for [`BARE_TTL_MS`].
+#[derive(Default)]
+pub struct BareLedger {
+    entries: HashMap<String, BareEntry>,
+}impl BareLedger {
+    /// Creates an empty ledger.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+        }
+    }
+
+    /// Starts one issuance request: exactly one contact, `email` or `did_web`.
+    ///
+    /// Returns the request id and the six-digit code, or why the contact is
+    /// refused. The contact value itself is never logged nor echoed back.
+    ///
+    /// # Errors
+    ///
+    /// The contact is missing, doubled, malformed — or there is no randomness.
+    pub fn start(
+        &mut self,
+        email: Option<&str>,
+        did_web: Option<&str>,
+        now: u64,
+    ) -> Result<(String, String), String> {
+        let ok = match (email, did_web) {
+            (Some(e), None) => valid_email(e),
+            (None, Some(d)) => valid_did_web(d),
+            _ => false,
+        };
+        if !ok {
+            return Err("email or did_web: malformed contact".to_owned());
+        }
+        let mut id_raw = [0u8; 16];
+        let mut code_raw = [0u8; 4];
+        OsRng
+            .try_fill_bytes(&mut id_raw)
+            .and_then(|()| OsRng.try_fill_bytes(&mut code_raw))
+            .map_err(|_| "no randomness".to_owned())?;
+        let id = hex::encode(id_raw);
+        let digits = u32::from_le_bytes(code_raw) % 1_000_000;
+        let mut code = [b'0'; 6];
+        let mut rest = digits;
+        let mut i = code.len();
+        while i > 0 {
+            i -= 1;
+            code[i] = b'0' + (rest % 10) as u8;
+            rest /= 10;
+        }
+        let code = String::from_utf8_lossy(&code).into_owned();
+        self.entries.retain(|_, e| e.expires_ms > now);
+        self.entries.insert(id.clone(), BareEntry {
+            expires_ms: now.saturating_add(BARE_TTL_MS),
+            code: code.clone(),
+        });
+        Ok((id, code))
+    }
+
+    /// The state of a request id: `"pending"` while it is known and fresh.
+    pub fn state(&mut self, id: &str, now: u64) -> Option<&'static str> {
+        self.entries.retain(|_, e| e.expires_ms > now);
+        self.entries.get(id).map(|_| "pending")
+    }
+
+    /// How many certificates were issued (этап 1: always zero, no database).
+    #[must_use]
+    pub fn issued(&self) -> u64 {
+        0
+    }
+}
+
+/// A `did:web` contact reads `did:web:<host>[:extra...]`: letters, digits and
+/// `-._~%!$&'()*+,;=` per non-empty segment.
+fn valid_did_web(s: &str) -> bool {
+    const PREFIX: &str = "did:web:";
+    let Some(rest) = s.strip_prefix(PREFIX) else {
+        return false;
+    };
+    if rest.is_empty() || rest.len() > 512 {
+        return false;
+    }
+    rest.split(':').all(|seg| {
+        !seg.is_empty()
+            && seg.len() <= 128
+            && seg.bytes().all(|b| {
+                b.is_ascii_alphanumeric()
+                    || matches!(
+                        b,
+                        b'-' | b'.'
+                            | b'_'
+                            | b'~'
+                            | b'%'
+                            | b'!'
+                            | b'$'
+                            | b'&'
+                            | b'\''
+                            | b'('
+                            | b')'
+                            | b'*'
+                            | b'+'
+                            | b','
+                            | b';'
+                            | b'='
+                    )
+            })
+    })
+}
+
+/// A plain `local@domain` sanity check: one `@`, a dot in the domain.
+fn valid_email(s: &str) -> bool {
+    if s.is_empty() || s.len() > 254 || s.contains(' ') {
+        return false;
+    }
+    let mut parts = s.split('@');
+    let (Some(local), Some(domain), None) = (parts.next(), parts.next(), parts.next()) else {
+        return false;
+    };
+    !local.is_empty()
+        && local.len() <= 64
+        && !domain.is_empty()
+        && domain.len() <= 253
+        && domain.contains('.')
+        && local
+            .bytes()
+            .all(|b| b.is_ascii_graphic() && b != b'@')
+        && domain
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.')
 }
 
 fn desk_error(e: &DeskError) -> Reply {
@@ -398,6 +570,11 @@ impl Shared {
                 Ok(h) => self.notices(h, &body),
                 Err(r) => r,
             },
+            ("POST", "/v1/bare/start") => self.bare_start(&body, now),
+            ("GET", p) if p.starts_with("/v1/bare/status/") => {
+                self.bare_status(p.trim_start_matches("/v1/bare/status/"), now)
+            }
+            ("GET", "/v1/bare/count") => self.bare_count(),
             _ => err(404, "no such endpoint"),
         }
     }
@@ -612,6 +789,43 @@ impl Shared {
         Reply(200, json!({"notices": notices, "dropped": dropped}))
     }
 
+    /// Starts one `bare` issuance request (этап 1, in-memory).
+    ///
+    /// The contact value (email or `did:web`) is validated and never logged.
+    fn bare_start(&self, body: &[u8], now: u64) -> Reply {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Body {
+            email: Option<String>,
+            did_web: Option<String>,
+        }
+        let b: Body = match serde_json::from_slice(body) {
+            Ok(b) => b,
+            Err(e) => return err(400, format!("body: {e}")),
+        };
+        let mut ledger = lock(&self.bare);
+        match ledger.start(b.email.as_deref(), b.did_web.as_deref(), now) {
+            Ok((id, code)) => Reply(200, json!({"id": id, "code": code, "send_to": BARE_SEND_TO})),
+            Err(e) => err(400, e),
+        }
+    }
+
+    /// The state of a `bare` request id: `{"state":"pending"}` or 404.
+    fn bare_status(&self, id: &str, now: u64) -> Reply {
+        let mut ledger = lock(&self.bare);
+        match ledger.state(id, now) {
+            Some(state) => Reply(200, json!({"state": state})),
+            None => err(404, "no such bare request"),
+        }
+    }
+
+    /// How many `bare` certificates were issued.
+    fn bare_count(&self) -> Reply {
+        // TODO(этап 2: БД): count issued certificates from the database once
+        // issuance persists past process memory.
+        Reply(200, json!({"issued": lock(&self.bare).issued()}))
+    }
+
     /// One pass of every holder's queue; then, once in a while, what ages out.
     fn tick(&self, now: u64) {
         for (id, h) in &self.holders {
@@ -657,6 +871,73 @@ impl Shared {
             if let Err(e) = self.save_holder(id, &st) {
                 eprintln!("ksg-service: holder {id} not saved: {e}");
             }
+        }
+    }
+}
+
+/// An [`Rpc`] that answers nothing: `bare_only` never touches the network.
+#[derive(Debug, Default)]
+struct NoRpc;
+
+impl Rpc for NoRpc {
+    fn call(
+        &self,
+        _method: &str,
+        _params: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        Err("no network in bare_only".to_owned())
+    }
+}
+
+/// A `Shared` handle with no holders, for the `bare` issuance routes.
+///
+/// Integration tests call [`Shared::bare_route`] through this constructor, so
+/// no network port is opened and no signer or database is needed. The `email`
+/// / `did:web` contact values are validated and never logged.
+impl Shared {
+    /// Creates an empty shared state for the `bare` routes (этап 1: no DB).
+    ///
+    /// # Errors
+    ///
+    /// The `desk` audience URI does not parse.
+    pub fn bare_only(audience: &str) -> Result<Self, String> {
+        Ok(Self {
+            cfg: Config {
+                listen: "127.0.0.1:0".to_owned(),
+                audience: Uri::parse(audience).map_err(|e| e.to_string())?,
+                state: PathBuf::from("/tmp"),
+                cluster: "devnet".to_owned(),
+                rpc: "http://127.0.0.1:1".to_owned(),
+                issuer_keys: PathBuf::from("/tmp/missing.json"),
+                max_standing_age_s: None,
+                legal_checkers: Vec::new(),
+                holders: Vec::new(),
+                workers: Some(1),
+            },
+            desk: Mutex::new(Desk::new(
+                Uri::parse(audience).map_err(|e| e.to_string())?,
+            )),
+            registry: Mutex::new(ChainRegistry::default()),
+            holders: BTreeMap::new(),
+            seen: Mutex::new(BTreeMap::new()),
+            rpc: Box::new(NoRpc),
+            legal: Vec::new(),
+            bare: Mutex::new(BareLedger::new()),
+        })
+    }
+
+    /// Drives one `bare` route in-process: `POST /v1/bare/start`,
+    /// `GET /v1/bare/status/{id}`, `GET /v1/bare/count`.
+    ///
+    /// Anything else is a 404. Contact values are never logged.
+    pub fn bare_route(&self, method: &str, path: &str, body: &[u8], now: u64) -> Reply {
+        match (method, path) {
+            ("POST", "/v1/bare/start") => self.bare_start(body, now),
+            ("GET", p) if p.starts_with("/v1/bare/status/") => {
+                self.bare_status(p.trim_start_matches("/v1/bare/status/"), now)
+            }
+            ("GET", "/v1/bare/count") => self.bare_count(),
+            _ => err(404, "no such endpoint"),
         }
     }
 
@@ -780,6 +1061,7 @@ pub fn start(
         holders,
         seen: Mutex::new(BTreeMap::new()),
         rpc,
+        bare: Mutex::new(BareLedger::new()),
     });
     let stop = Arc::new(AtomicBool::new(false));
     let mut threads = Vec::new();
