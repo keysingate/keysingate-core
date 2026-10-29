@@ -7,7 +7,7 @@
 **Every step an AI agent takes becomes a signed page.<br/>Anyone can verify it offline — without trusting the platform that ran the agent, or us.**
 
 [![Rust](https://img.shields.io/badge/rust-1.94.1-orange?logo=rust)](rust-toolchain.toml)
-[![Tests](https://img.shields.io/badge/tests-959%20passing-brightgreen)](#-checks)
+[![Tests](https://img.shields.io/badge/tests-1034%20passing-brightgreen)](#-checks)
 [![Core license](https://img.shields.io/badge/core-Apache--2.0-blue)](LICENSE)
 [![Container license](https://img.shields.io/badge/container-proprietary-lightgrey)](LICENSE-PROPRIETARY)
 [![Post-quantum](https://img.shields.io/badge/signatures-Ed25519%20%2B%20ML--DSA--65-purple)](#-what-is-inside)
@@ -226,6 +226,7 @@ flowchart TB
 | Every Muse Spark call becomes a page (`ksg_model_call`); a SAM 3.1 damage mask becomes a page (`ksg_mask_damage`) | [`scripts/ksg_mcp.py`](scripts/ksg_mcp.py), [`scripts/ksg_model_api.py`](scripts/ksg_model_api.py) |
 | The expert re-asks SAM 3.1 with the same box and compares the mask hash byte for byte | [`scripts/expert_recheck_mask.py`](scripts/expert_recheck_mask.py) |
 | The judge explanation: every `[p:N]` must point at an existing page that verifies offline, or the explanation is refused | [`scripts/judge_explain.py`](scripts/judge_explain.py) |
+| The judge page: pages ACCEPTED/REJECTED, the 6 MiB capsule, the expert SAM-mask ✓ and the explanation with clickable `[p:N]` — assembled at the end of the orchestrator into `demo/out/judge.html`; a labelled SAMPLE without a live run | [`scripts/judge_page.py`](scripts/judge_page.py), [`demo/sample/judge_sample.html`](demo/sample/judge_sample.html) |
 | The container number paid with x402 through μ Gate — the agent never holds a wallet key | [`scripts/e2e_ksg_x402.sh`](scripts/e2e_ksg_x402.sh) |
 | Pro with anchors on a local Solana node | [`scripts/demo_pro_localnet.sh`](scripts/demo_pro_localnet.sh) |
 | The same chain on the capsule: print → initiation → three pages → export → ACCEPTED offline; a tampered page REJECTED | [`scripts/demo_pro_capsule.sh`](scripts/demo_pro_capsule.sh) |
@@ -235,7 +236,7 @@ flowchart TB
 - [x] **The capsule** — one fixed-size 6 MiB file indistinguishable from noise; each party holds one secret file; parts are sealed to the parties' maps (X25519 + ML-KEM-768)
 - [x] Agent tools over MCP; the stand's demo chain
 - [x] The container's code running inside the capsule: the module in wasmtime behind the two imports, a session of open → call ×N → close, the `ksg-capsule` command line; Pro end to end through the capsule on a local Solana node: initiation and journal opening with the owner's co-seal, three anchored pages exported and ACCEPTED, tampered pages REJECTED (K5)
-- [x] Muse Spark: every model call recorded as a page; image evidence through SAM 3.1 (the mask is byte-identical when re-asked with the same box); the agent's explanation for the judge, its citations checked against the verified pages — the whole scene runs with one command (`scripts/demo_orchestrator.sh`), five pages ACCEPTED
+- [x] Muse Spark: every model call recorded as a page; image evidence through SAM 3.1 (the mask is byte-identical when re-asked with the same box); the agent's explanation for the judge, its citations checked against the verified pages — the whole scene runs with one command (`scripts/demo_orchestrator.sh`), every page ACCEPTED
 - [x] The client agent is named by the `did:key` of its own group key — two receivers never share an identifier
 
 <details>
@@ -299,11 +300,13 @@ A universal adapter runtime: local (stdio) and remote (HTTP / SSE / MCP / A2A / 
 ## ✅ Checks
 
 ```bash
-cargo test --workspace            # 968 tests
+cargo test --workspace            # 1034 tests
 cargo clippy --workspace --all-targets
 scripts/test_split.sh cloud       # with cargo-nextest: the fast part
 scripts/test_split.sh hermes      # the three slow suites (cli, base, devnet)
 ```
+
+> The network half of K5 needs `solana-test-validator` and a funded payer; the anchor wait is 120 s (`KSG_ANCHOR_WAIT_S`); the test is `#[ignore]` — run it with `cargo test -p ksg-capsule-reader -- --ignored k5_network`.
 
 > [!WARNING]
 > The noise test of the capsule runs only optimized:<br/>

@@ -4,7 +4,7 @@
 # up solana-test-validator on 127.0.0.1, funds a throw-away payer from the
 # node's faucet, builds the capsule module (wasm), then drives the reader's
 # binary `ksg-capsule` (not the test): print (heavy, anchored) -> initiation
-# (the seals are anchored on the node) -> three work pages -> export of pages
+# (the seals are anchored on the node) -> work pages (KSG_DEMO_PAGES, 1 by default) -> export of those pages
 # 1..3. Node, payer and capsule are thrown away.
 #
 # `ksg-capsule` has no `scan-key` command (it cannot hand out the holder's
@@ -47,14 +47,26 @@ step "$C" --home "$H" init --class heavy --anchor solana:localnet --payer "$PAYE
 [ "$(size)" = 6291456 ] || { echo "FAIL: the capsule is $(size) bytes after init"; exit 1; }
 step "$C" --home "$H" initiate
 [ "$(size)" = 6291456 ] || { echo "FAIL: the capsule after the initiation"; exit 1; }
-for t in "input: claim 4417, water damage, policy P-88 (synthetic)" \
-         "tool call: policy_lookup(P-88) -> exclusion 7.2 gradual leak" \
-         "result: claim rejected, exclusion 7.2"; do
+# Every Pro page costs two anchors (its seal and the status record pressed
+# with it), each waited to `finalized` (~14 s on an idle node); the initiation
+# with the journal opening costs four. KSG_DEMO_PAGES=1 (default) keeps the
+# anchored part of the demo at 6 anchors (~1.5 min); 3 shows all three pages
+# (10 anchors, ~2.5 min).
+PAGES=${KSG_DEMO_PAGES:-1}
+if [ "$PAGES" -ge 3 ]; then
+  TEXTS=("input: claim 4417, water damage, policy P-88 (synthetic)"
+         "tool call: policy_lookup(P-88) -> exclusion 7.2 gradual leak"
+         "result: claim rejected, exclusion 7.2")
+else
+  TEXTS=("result: claim 4417 rejected, exclusion 7.2 gradual leak (policy P-88, synthetic)")
+  PAGES=1
+fi
+for t in "${TEXTS[@]}"; do
   step "$C" --home "$H" work "$t"
   [ "$(size)" = 6291456 ] || { echo "FAIL: the capsule after a work page"; exit 1; }
 done
 "$C" --home "$H" status
-for n in 1 2 3; do
+for n in $(seq 1 "$PAGES"); do
   step "$C" --home "$H" export-page "$n" --out "$W/p$n.json"
   [ "$(size)" = 6291456 ] || { echo "FAIL: the capsule after export-page $n"; exit 1; }
 done

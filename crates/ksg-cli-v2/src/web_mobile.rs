@@ -118,6 +118,41 @@ impl Mobile for WebMobile {
     }
 }
 
+/// The birth's two crossings over the page wire: the hello out to the page,
+/// back with the container's answer, the share home for the reader's
+/// `FinishBirth`. Rides the same slot the signing rounds ride after the
+/// initiation — the page answers birth lines through the [`BirthPage`]
+/// holding the birth's secret, the way it answers rounds through the half.
+///
+/// # Errors
+///
+/// The page refuses, answers late, or answers what was not asked for.
+impl WebMobile {
+    /// Opens the page's birth: the commitment for the module's `BeginBirth`.
+    /// Carries no secret — the secret stays in the page, like the round's
+    /// nonces.
+    pub fn keygen_start(&mut self, kid: &str) -> Result<Vec<u8>, String> {
+        use ksg_mobile_v2::BirthOp;
+        let line = Request::KeygenStart { kid: kid.into() };
+        crate::mobile::birth_exchange(&mut |req| self.call(req), &line, BirthOp::Hello)
+    }
+
+    /// Closes the page's birth with the container's answer: the share for
+    /// the module's `FinishBirth`. The group key the reader names the
+    /// `did:key` from rides the module's answer to that share: the
+    /// container's `FinishBirth` names the key both sides hold half of, and
+    /// the reader reads it there. The half stays in the page, for the rounds
+    /// that sign the birth's finish — the page's bindings (`ksg-web-v2`)
+    /// keep it from the same closed birth.
+    pub fn keygen_finish(&mut self, reply: &[u8]) -> Result<Vec<u8>, String> {
+        use ksg_mobile_v2::BirthOp;
+        let line = Request::KeygenFinish {
+            reply: B64.encode(reply),
+        };
+        crate::mobile::birth_exchange(&mut |req| self.call(req), &line, BirthOp::Finish)
+    }
+}
+
 fn reply(mut s: &TcpStream, status: &str, kind: &str, body: &[u8]) -> std::io::Result<()> {
     write!(
         s,

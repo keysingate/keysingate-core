@@ -86,8 +86,16 @@ fn k5_offline_a_printed_capsule_verifies_page_by_page() {
 
     let initiated = flow::initiate(&layout).expect("the initiation goes through");
     assert!(
-        initiated.get("mobile_half").and_then(serde_json::Value::as_str).is_some(),
-        "the client's half is handed to the reader: {initiated}"
+        initiated
+            .get("mobile_half")
+            .and_then(serde_json::Value::as_str)
+            .is_none(),
+        "no half leaves the module: the initiation hands out no mobile_half: {initiated}"
+    );
+    let file = SideFile::read(&layout.client_side()).expect("the client's file");
+    assert!(
+        !file.half.is_empty(),
+        "the client's half is written to the client's file"
     );
     assert_capsule_size(&layout, "after initiate");
 
@@ -217,7 +225,8 @@ fn a_side_file_of_the_owner_opens_the_holders_slot_before_initiation() {
 ///
 /// Not run in the cloud: it needs `solana-test-validator`, a funded payer and
 /// the reader's anchoring, which is not wired into `ksg-capsule` yet (see the
-/// report). On the owner's machine:
+/// report). On the owner's machine (if port 8000 is busy, start the validator
+/// with `--gossip-port <free> --dynamic-port-range <free>-<free>`):
 ///
 /// ```text
 /// solana-test-validator --ledger /tmp/ksg-ledger --reset --quiet &
@@ -239,9 +248,9 @@ fn k5_network_pro_through_the_capsule() {
     let payer = std::env::var("KSG_PAYER").expect("set KSG_PAYER to a funded key file");
     let rpc = std::env::var("KSG_RPC").unwrap_or_else(|_| "http://127.0.0.1:8899".into());
     // The anchor wait is 120 s by default in the anchorer: the test names its
-    // own 20 s unless the caller set `KSG_ANCHOR_WAIT_S` already.
+    // own 120 s unless the caller set `KSG_ANCHOR_WAIT_S` already.
     if std::env::var("KSG_ANCHOR_WAIT_S").is_err() {
-        std::env::set_var("KSG_ANCHOR_WAIT_S", "20");
+        std::env::set_var("KSG_ANCHOR_WAIT_S", "120");
     }
     let dir = home("network");
     let layout = Layout::new(&dir);

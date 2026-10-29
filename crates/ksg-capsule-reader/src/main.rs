@@ -5,9 +5,9 @@
 //!                              [--serial N] [--artifact URI] [--anchor solana:CLUSTER
 //!                              (--payer KEYFILE | --service URL --holder ID) [--rpc URL]]
 //!                              [--wasm PATH]
-//! ksg-capsule --home DIR initiate
-//! ksg-capsule --home DIR work TEXT
-//! ksg-capsule --home DIR export-page N [--by client|owner] [--out FILE]
+//! ksg-capsule --home DIR initiate [--mobile-web ADDR] [--web-root DIR]
+//! ksg-capsule --home DIR work TEXT [--mobile-web ADDR] [--web-root DIR]
+//! ksg-capsule --home DIR export-page N [--by client|owner] [--mobile-web ADDR] [--web-root DIR]
 //! ksg-capsule --home DIR keys [--out FILE]
 //! ksg-capsule --home DIR status
 //! ```
@@ -27,9 +27,9 @@ ksg-capsule --home DIR init [--class light|heavy|bare] [--emission ksg:em:test:N
                              [--serial N] [--artifact URI] [--anchor solana:CLUSTER
                              (--payer KEYFILE | --service URL --holder ID) [--rpc URL]]
                              [--wasm PATH]
-ksg-capsule --home DIR initiate
-ksg-capsule --home DIR work TEXT
-ksg-capsule --home DIR export-page N [--by client|owner] [--out FILE]
+ksg-capsule --home DIR initiate [--mobile-web ADDR] [--web-root DIR]
+ksg-capsule --home DIR work TEXT [--mobile-web ADDR] [--web-root DIR]
+ksg-capsule --home DIR export-page N [--by client|owner] [--mobile-web ADDR] [--web-root DIR]
 ksg-capsule --home DIR keys [--out FILE]
 ksg-capsule --home DIR status";
 
@@ -130,7 +130,11 @@ fn run(args: &[String]) -> Result<(), Problem> {
             Ok(())
         }
         "initiate" => {
-            let value = flow::initiate(&layout)?;
+            let web = mobile_web(&args)?;
+            let value = match web {
+                None => flow::initiate(&layout)?,
+                Some(mut web) => flow::initiate_mobile_web(&layout, &mut web)?,
+            };
             println!("{value}");
             Ok(())
         }
@@ -139,7 +143,10 @@ fn run(args: &[String]) -> Result<(), Problem> {
                 .rest
                 .get(1)
                 .ok_or_else(|| usage("work needs the text of the page"))?;
-            let value = flow::work(&layout, text)?;
+            let value = match mobile_web(&args)? {
+                None => flow::work(&layout, text)?,
+                Some(mut web) => flow::work_mobile_web(&layout, &mut web, text)?,
+            };
             println!("{value}");
             Ok(())
         }
@@ -150,12 +157,19 @@ fn run(args: &[String]) -> Result<(), Problem> {
                 .ok_or_else(|| usage("export-page needs a page number"))?
                 .parse()
                 .map_err(|_| usage("export-page: the number is not a number"))?;
-            let party = match args.get("by").unwrap_or("client") {
-                "client" => Party::Client,
-                "owner" => Party::Owner,
-                other => return Err(usage(format!("--by {other}: client or owner"))),
+            let web = mobile_web(&args)?;
+            let party = match (args.get("by").unwrap_or("client"), web.is_some()) {
+                (by, true) if by != "client" => {
+                    return Err(usage("--mobile-web only exports the client's pages"));
+                }
+                ("client", _) => Party::Client,
+                ("owner", _) => Party::Owner,
+                (other, _) => return Err(usage(format!("--by {other}: client or owner"))),
             };
-            let page = flow::export_page(&layout, number, party)?;
+            let page = match web {
+                None => flow::export_page(&layout, number, party)?,
+                Some(mut web) => flow::export_page_mobile_web(&layout, &mut web, number)?,
+            };
             let out = args
                 .get("out")
                 .map_or_else(|| layout.page(number), std::path::PathBuf::from);
@@ -250,4 +264,25 @@ fn parse_print(args: &Args) -> Result<Print, Problem> {
         }
     };
     Ok(print)
+}
+
+/// The browser page as the mobile half for `initiate`: the half is born in
+/// the page (`ksg-web-v2`), and the reader only carries public bytes — the
+/// hello out, the container's answer back, the share in `FinishBirth` — the
+/// same wire the phone's `Keygen` automaton crosses. `None` without
+/// `--mobile-web`; `--web-root DIR` serves the page's files.
+fn mobile_web(args: &Args) -> Result<Option<Box<ksg_cli_v2::web_mobile::WebMobile>>, Problem> {
+    match (args.get("mobile-web"), args.get("web-root")) {
+        (None, None) => Ok(None),
+        (None, Some(_)) => Err(usage("--web-root goes with --mobile-web")),
+        (Some(addr), root) => {
+            let web = ksg_cli_v2::web_mobile::WebMobile::listen(
+                addr,
+                root.map(std::path::PathBuf::from),
+            )
+            .map_err(Problem::Failed)?;
+            eprintln!("mobile half: open {}", web.url);
+            Ok(Some(Box::new(web)))
+        }
+    }
 }

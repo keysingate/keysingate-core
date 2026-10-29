@@ -18,6 +18,16 @@
 //! A commitment needs no consent: it signs nothing. A share is made only
 //! after a yes; a no closes the round with nothing signed.
 //!
+//! # The birth in the page
+//!
+//! The half the page signs with starts as a birth: [`keygen::WebBirth`]
+//! opens it with the client's key name (`kid`), its hello goes to the
+//! reader's `BeginBirth`, the container's answer closes it, and the half
+//! signs the rounds that finish the birth while the container lands. The
+//! same automaton as the phone's [`Keygen`][ksg_mobile_v2::Keygen] — the
+//! birth's secret never leaves the page's memory, and a second `finish`
+//! answers `NoBirth`.
+//!
 //! # What is not here
 //!
 //! * Secure storage of the half: the page reads the half from a file the
@@ -28,10 +38,13 @@
 
 #![forbid(unsafe_code)]
 
+pub mod backup;
+pub mod keygen;
+
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use base64::Engine as _;
 use ksg_container_v2::client_key::{MobileHalf, SigningRound};
-use ksg_mobile_v2::{handle_line, Consent, Request, Session, Signing};
+use ksg_mobile_v2::{handle_line, Consent, Request, Session, Signing, WaitingHalf};
 use rand_core::{CryptoRng, RngCore};
 use wasm_bindgen::prelude::*;
 
@@ -51,7 +64,7 @@ impl Consent for Word {
 #[must_use]
 pub fn describe_request(line: &str) -> Option<Signing> {
     match serde_json::from_str::<Request>(line).ok()? {
-        Request::Commit => None,
+        Request::Commit | Request::KeygenStart { .. } | Request::KeygenFinish { .. } => None,
         Request::Respond { round } => {
             let b = B64.decode(round).ok()?;
             let r = SigningRound::from_bytes(&b).ok()?;
@@ -78,6 +91,16 @@ impl Web {
         })
     }
 
+    /// The waiting half from a closed birth: the half signs the rounds that
+    /// finish the birth while the container lands. A commitment needs no
+    /// word; a share asks the holder on the page.
+    #[must_use]
+    pub fn from_waiting(waiting: WaitingHalf) -> Self {
+        Self {
+            session: waiting.into_session(Word::default()),
+        }
+    }
+
     /// Answers one request line with the holder's word on it.
     pub fn answer<R: RngCore + CryptoRng>(
         &mut self,
@@ -95,6 +118,12 @@ impl Web {
 /// The half in the page.
 #[wasm_bindgen]
 pub struct WebHalf(Web);
+
+impl From<Web> for WebHalf {
+    fn from(web: Web) -> Self {
+        Self(web)
+    }
+}
 
 #[wasm_bindgen]
 impl WebHalf {

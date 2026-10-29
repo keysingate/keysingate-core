@@ -71,7 +71,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use base64::Engine as _;
 use ksg_container_v2::capsule::{self, MapPub, MapRole, Part, PartKind, Shared};
-use ksg_container_v2::client_key::{share_commitment, MobileHalf};
+use ksg_container_v2::client_key::{
+    share_commitment, Commitment, MobileHalf, MobileShare, SigningRound,
+};
 use ksg_container_v2::container::{Container, Evidence, JournalWrite, Writes};
 use ksg_container_v2::layers::{OpenWith, SealTo, MLKEM_EK_LEN};
 use ksg_container_v2::{Event, Operation, Role, Where, Work, Wrapped};
@@ -85,7 +87,7 @@ use ksg_core_v2::section::StatusRecord;
 use ksg_core_v2::status::{transition_for, Outcome};
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, Zeroizing};
+use crate::secret::{OwnerKey, StateKey};
 
 /// The anchor kind of a record this module presses offline. No network
 /// accepts it (`ksg-verify-v2` says so by name); the reader's anchor replaces
@@ -104,8 +106,13 @@ pub const LOCAL_ANCHOR: &str = "urn:ksg:anchor:local:v1";
 pub enum Request {
     /// E-4: the client's key is born; the maps' public halves come with it.
     ///
-    /// Stand-only path: both halves are born inside the module (demo). The
-    /// product splits the birth: `BeginBirth` / `FinishBirth`.
+    /// Stand/test-only (the all-in-one birth where one process holds both
+    /// halves for the demo or a test): `#[doc(hidden)]` because the product
+    /// wire has no `initiate` command — it splits the birth over
+    /// `BeginBirth` / `FinishBirth`. One process must never hold both halves
+    /// outside a stand or a test, so `debug_assert`s on the helpers below
+    /// pin the invariant in debug builds.
+    #[doc(hidden)]
     Initiate,
     /// E-4 split, messages 1-2: the mobile side commitment comes in, the
     /// container answer (message 2) goes out. Nothing is pressed yet.
@@ -388,8 +395,22 @@ enum PageToWrite {
     Record(RecordKind, Piece),
 }
 
-/// One opened capsule with the container in memory: one session per module
-/// instance (`Spec_kapsula` §10 п. 3).
+/// What a repeated command still owes the press (И6б): the offsets its
+/// open press already ticked. While the press stays open — a `Needs*`
+/// answer — a repeat reuses them, so the wire round signs the same bytes
+/// and the closed round is picked up instead of a new one. A successful,
+/// refused, or anchor-owed press drops them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct PressOffsets {
+    /// The text the pending `Work` press was opened with.
+    work_text: Option<String>,
+    /// The offset page 0 of a pending opening was ticked with.
+    open_offset: Option<u64>,
+    /// The offsets the pending `Work` page drafts were ticked with.
+    page_offsets: Vec<u64>,
+    /// The offsets the pending status records were ticked with.
+    status_offsets: Vec<u64>,
+}
 ///
 /// Secrets the session holds — the state key, the client's mobile half — are
 /// wiped when it drops: `Zeroizing` and the `Drop` of the halves, not a manual
@@ -400,8 +421,9 @@ pub struct Session {
     /// Every map the capsule seals to, in slot order; re-assembly re-seals
     /// each slot to its own public halves.
     maps: Vec<(MapRole, SealTo)>,
-    /// The key the container's state is sealed under.
-    state_key: Zeroizing<[u8; 32]>,
+    /// The key the container's state is sealed under: wiped when the
+    /// session drops ([`StateKey`]).
+    state_key: StateKey,
     /// The container's template identifier — what the state opens as.
     template: Hash,
     /// The artefact the initiation is bound to.
@@ -421,8 +443,9 @@ pub struct Session {
     /// The client's half, while the session holds it: from the side file, or
     /// just born by [`Request::Initiate`].
     mobile: Option<MobileHalf>,
-    /// The owner's key, when the side file is the owner's.
-    owner: Option<Ed25519Signer>,
+    /// The owner's key, when the side file is the owner's: wiped when
+    /// the session drops ([`OwnerKey`]).
+    owner: Option<OwnerKey>,
     /// A birth done in memory and not yet pressed: the client's key exists,
     /// the initiation does not. A close with one pending refuses — the birth
     /// is never stored (`Container::begin_birth`), so dropping it would lose
@@ -450,6 +473,26 @@ pub struct Session {
     /// The owner's co-seal over [`Session::pending_open_bytes`], handed in
     /// by [`Request::Sign`] while an opening waits for it.
     pending_open_owner: Option<Signature>,
+    /// What crosses the wire while a client round is open: the message
+    /// both halves sign, and the mobile side's commitment it started from.
+    /// Kept until the round closes — a `ClientCommit` while one is open is
+    /// refused, just as a `ClientShare` with none open is.
+    client_round: Option<ClientRound>,
+    /// The message a command wants the wire round to sign: set by
+    /// [`Session::sign_client`] when it answers `NeedsClientCommit`, read by
+    /// [`Session::client_commit`], cleared when the round opens. A
+    /// commitment names no message — it answers this one.
+    client_round_msg: Option<Vec<u8>>,
+    /// The wire round's signatures, waiting for the command to be repeated:
+    /// one entry per message the command asked the round to sign — a `Work`
+    /// press signs its event and its seal, two messages, two rounds, so one
+    /// slot is not enough. Entries are keyed by the message and picked up
+    /// without removing: a repeated command reuses what its earlier round
+    /// closed, and a successful press drops them all.
+    pending_client_sigs: Vec<(Vec<u8>, Vec<Signature>)>,
+    /// What a repeated command still owes the press (И6б): the offsets its
+    /// open press already ticked — see [`PressOffsets`].
+    press_offsets: PressOffsets,
     /// The anchors the network still owes this session, oldest first — a
     /// seal before its status record. A press in Pro queues them and answers
     /// the head; each [`Request::Reanchor`] takes the head off and answers
@@ -559,7 +602,7 @@ impl Session {
         let mut session = Self {
             container,
             maps,
-            state_key: Zeroizing::new(state_key),
+            state_key: StateKey::new(state_key),
             template,
             artifact,
             client_kid,
@@ -577,6 +620,10 @@ impl Session {
             pending_open_bytes: Vec::new(),
             pending_open_offset: None,
             pending_open_owner: None,
+            client_round: None,
+            client_round_msg: None,
+            pending_client_sigs: Vec::new(),
+            press_offsets: PressOffsets::default(),
             pending_anchors: std::collections::VecDeque::new(),
         };
         for (i, raw) in anchored.iter().enumerate() {
@@ -599,7 +646,7 @@ impl Session {
     /// | [`Request::Keys`] | the keys a verifier checks the pages with, as a JSON array |
     /// | [`Request::Work`] | `{"pages": n, "seal": "<multihash>"}` |
     /// | [`Request::ExportPage`] | the page as JSON, as `ksg-verify-v2` reads it — the same bytes the session keeps in its outputs |
-    /// | [`Request::Initiate`] | `{"container": "<multihash>", "mobile_half": "<base64url>", "share_commitment": "<base64url>"}` (stand-only) |
+    /// | [`Request::Initiate`] | `{"container": "<multihash>", "share_commitment": "<base64url>"}` (stand-only; the mobile half never leaves the module) |
     /// | [`Request::BeginBirth`] | `{"reply": "<base64url>"}` (message 2 for the mobile side) |
     /// | [`Request::FinishBirth`] | `{"container": "<multihash>"}` |
     /// | [`Request::OpenJournal`] | `{"pages": n, "seal": "<multihash>"}` |
@@ -619,18 +666,18 @@ impl Session {
             Request::Reanchor { attestation } => self.reanchor(&attestation),
             Request::OpenJournal => self.open_journal(),
             Request::Sign { signature } => self.sign_pending(&signature),
-            Request::ClientCommit { .. } | Request::ClientShare { .. } => Answer::Refused {
-                reason: "no client round open".into(),
-            },
+            Request::ClientCommit { commitment } => self.client_commit(&commitment),
+            Request::ClientShare { share } => self.client_share(&share),
         }
     }
 
     /// Closes the session: the new capsule and what the reader must keep
     /// outside it.
     ///
-    /// `outputs` are, in order: the client's mobile half after an initiation
-    /// (the reader writes it into the side file — without it the client could
-    /// never sign again), and every page an export handed out.
+    /// `outputs` are, in order, every page an export handed out. The client's
+    /// mobile half is never an output: it stays inside the module (stand-only
+    /// birth) or never enters it (the split birth of И1), and the reader never
+    /// needs to read it back.
     ///
     /// # Errors
     ///
@@ -680,7 +727,7 @@ impl Session {
         let mut rng = CspRng;
         let state = self
             .container
-            .seal_to_bytes(&self.state_key, &mut rng)
+            .seal_to_bytes(self.state_key.bytes(), &mut rng)
             .map_err(|e| format!("the state does not seal: {e}"))?;
         let mut fill = |out: &mut [u8]| rng.fill_bytes(out);
         let capsule = seal_parts(
@@ -730,7 +777,10 @@ impl Session {
         }
     }
 
-    /// E-5: one record of work, sealed by the client's two halves.
+    /// E-5: one record of work, sealed by the client's two halves — and,
+    /// with no half inside (И4в), through the wire round: the reader answers
+    /// each `NeedsClientCommit`/`NeedsShare` in turn and repeats `Work`
+    /// until `Done` (an event and its seal are two messages, so two rounds).
     fn work(&mut self, text: &str) -> Answer {
         if !self.container.born() {
             return Answer::Refused {
@@ -809,14 +859,30 @@ impl Session {
 
     /// E-4: the client's key is born, and the container with it.
     ///
-    /// The birth is three messages between two sides; both run here, because
-    /// the capsule is the only place that holds the container's half and the
-    /// session may hold the other. The signature set is the client's **and**
+    /// Stand/test-only: the birth is three messages between two sides, both
+    /// run here, because the capsule is the only place that holds the
+    /// container's half and the session may hold the other. The product
+    /// splits the birth over the wire (`BeginBirth` / `FinishBirth`). Builds
+    /// have no `initiate`
+    /// command: one process must never hold both halves outside a stand or
+    /// a test, so a release binary refuses the all-in-one path at the
+    /// boundary instead of pressing it.
     /// the owner's (`Operation::Initiate`), so a session that is only the
     /// client's answers [`Answer::NeedsSignature`] with the bytes the owner
     /// signs, and keeps the birth in memory until it is pressed or the session
     /// closes (a close refuses: a birth is never stored).
+    ///
+    /// Stand/test-only: `#[doc(hidden)]` because the wire has no `initiate`
+    /// command outside the stand and tests. The `debug_assert`
+    /// below pins the invariant in debug builds: the all-in-one birth runs
+    /// where one process holds the half for the demo or a test — never in
+    /// the product, where the halves live on two sides of the wire.
+    #[doc(hidden)]
     fn initiate(&mut self) -> Answer {
+        debug_assert!(
+            self.mobile.is_none(),
+            "all-in-one birth runs on the stand or in tests: the session must hold no half yet"
+        );
         if self.container.born() {
             return Answer::Refused {
                 reason: "the container is initiated already".into(),
@@ -992,6 +1058,28 @@ impl Session {
                 reason: "the container is initiated already".into(),
             };
         }
+        if self.pending_birth {
+            // The press waits for a party: the signature round answers it, a
+            // repeated FinishBirth re-asks the same bytes — the birth is not
+            // pressed twice.
+            return match self.press(
+                Operation::Initiate,
+                &[Party::Client, Party::Owner],
+                &Evidence::Initiation { at: Where::Inside },
+                PageToWrite::None,
+            ) {
+                // The press went in through the wire round: the birth is
+                // pressed, only the queue waits.
+                Ok(()) => {
+                    let id = *self.container.id();
+                    self.finish_birth_done(id)
+                }
+                // Any other answer — `NeedsClientCommit`, `NeedsShare`, a
+                // stranger's refusal, the network's `NeedsAnchor` — goes back
+                // to the reader as it is.
+                Err(answer) => answer,
+            };
+        }
         use ksg_container_v2::client_key::KeygenFinish;
         let fin = match KeygenFinish::from_bytes(fin_bytes) {
             Ok(f) => f,
@@ -1040,8 +1128,11 @@ impl Session {
         }
         self.client_kid = named;
         self.pending_birth = true;
-        // No mobile half inside: the client signs through the round of И4, so
-        // a `NeedsSignature { party: client }` here is the bridge, not an error.
+        // No mobile half inside: the client signs through the round of И4 —
+        // the wire answers `NeedsClientCommit`, the reader's commitment goes
+        // in through `Request::ClientCommit`, the round through
+        // `Answer::NeedsShare` and `Request::ClientShare`. An owner's
+        // signature (`NeedsSignature { party: owner }`) is the other wait.
         let pressed = self.press(
             Operation::Initiate,
             &[Party::Client, Party::Owner],
@@ -1050,6 +1141,9 @@ impl Session {
         );
         match pressed {
             Ok(()) => self.finish_birth_done(id),
+            // The client round carries no party: only the owner names one.
+            Err(needed @ Answer::NeedsClientCommit { .. })
+            | Err(needed @ Answer::NeedsShare { .. }) => needed,
             Err(needs @ Answer::NeedsSignature { .. }) => {
                 self.pending_bytes = match &needs {
                     Answer::NeedsSignature { bytes, .. } => bytes.clone(),
@@ -1080,9 +1174,15 @@ impl Session {
         }
     }
 
-    /// The bookkeeping of a pressed birth: the client's half goes to the
-    /// reader, and the session forgets it when the owner's file is the one
-    /// that pressed (the half is the client's).
+    /// The bookkeeping of a pressed birth: the half never leaves the
+    /// module — it stays in the session, or the session forgets it at once
+    /// when the owner's file is the one that pressed (the half is the
+    /// client's, not the reader's to keep). Stand/test-only, paired with
+    /// [`Session::initiate`]: the split birth answers through
+    /// [`Session::finish_birth_done`] instead. `#[doc(hidden)]` because the
+    /// wire has no `initiate` command outside the stand and tests:
+    /// one process must never hold both halves outside a stand or a test.
+    #[doc(hidden)]
     fn birth_done(&mut self, id: Hash) -> Answer {
         let Some(mobile) = self.mobile.take() else {
             return Answer::Refused {
@@ -1098,18 +1198,10 @@ impl Session {
             }
         };
         // E-19: the commitment to the mobile half — the reader anchors it.
+        // The half itself is no output: it never leaves the module.
         let commitment = share_commitment(&share);
-        let half = match mobile.to_bytes() {
-            Ok(b) => b,
-            Err(e) => {
-                return Answer::Refused {
-                    reason: format!("the half does not encode: {e}"),
-                };
-            }
-        };
         self.pending_birth = false;
         self.pending_owner = None;
-        self.outputs.push(half.to_vec());
         if self.owner.is_some() {
             // The owner pressed the initiation: the client's half is the
             // client's, and this session forgets it at once.
@@ -1120,7 +1212,6 @@ impl Session {
         Answer::Done {
             bytes: serde_json::json!({
                 "container": id.to_multihash(),
-                "mobile_half": B64.encode(half.as_slice()),
                 "share_commitment": B64.encode(commitment),
             })
             .to_string()
@@ -1128,7 +1219,12 @@ impl Session {
         }
     }
 
-    /// E-5: the journal opens — page 0, sealed by the client's two halves.
+    /// E-5: the journal is open — page 0, sealed by the client's two halves.
+    ///
+    /// With no half inside (И4г) the seal goes through the wire round: the
+    /// reader answers each `NeedsClientCommit`/`NeedsShare` in turn and
+    /// repeats `OpenJournal` until `Done` (or the owner's `NeedsSignature`
+    /// in Pro).
     ///
     /// Pro opens with the owner's seal and the anchor (CH-26), as on the
     /// stand: a client's session answers [`Answer::NeedsSignature`] with the
@@ -1201,7 +1297,21 @@ impl Session {
                 .map_err(|e| Answer::Refused {
                     reason: format!("the opening does not seal: {e}"),
                 })?;
-        let seal = self.sign_client(&bytes)?;
+        // The offset stays ticked while the press is open (И6б): a repeated
+        // `OpenJournal` re-seals the same bytes — the wire round signs them,
+        // the closed round is picked up. A successful press clears it (see
+        // `Session::clear_opening`); a refusal drops it below.
+        let seal = match self.sign_client(&bytes) {
+            Ok(seal) => seal,
+            Err(needs) => {
+                if Self::is_wait_answer(&needs) {
+                    self.pending_open_offset = Some(offset_ms);
+                } else {
+                    self.pending_open_offset = None;
+                }
+                return Err(needs);
+            }
+        };
         let pro = self.container.opening_form() == ksg_core_v2::journal::Mode::Pro;
         if !pro {
             self.pending_open_offset = None;
@@ -1424,7 +1534,44 @@ impl Session {
     /// The client signs through both halves: the mobile one here, the
     /// container's inside. The round is opened and closed in one call — the
     /// capsule model keeps both halves in one process for the demo (Л-10).
+    ///
+    /// The round of the client's split key is the bridge, not the
+    /// signature: with no half inside ([`Session::finish_birth_request`],
+    /// И4в), every client signature spans the wire — round by round, each
+    /// message its own open. [`Answer::NeedsClientCommit`] carries the
+    /// message both halves sign, [`Request::ClientCommit`] opens the
+    /// container's side of it, [`Answer::NeedsShare`] carries the round the
+    /// mobile side signs, and [`Request::ClientShare`] closes it. A session
+    /// that already holds the half signs at once, as before.
     fn sign_client(&mut self, msg: &[u8]) -> Result<Vec<Signature>, Answer> {
+        // The wire round's signatures wait for the repeated command: the
+        // same message picks up the round it closed — another message for a
+        // command whose signature was refused opens its own round; they sign
+        // exactly what each round signed.
+        if let Some((_, sigs)) = self.pending_client_sigs.iter().find(|(m, _)| m == msg) {
+            return Ok(sigs.clone());
+        }
+        if self.mobile.is_some() {
+            return self.sign_client_local(msg);
+        }
+        // No half inside: the signature comes over the wire. A round already
+        // open is answered again — the same message, so the same round.
+        if let Some(open) = &self.client_round {
+            return Err(self.needs_share(&open.round));
+        }
+        self.client_round_msg = Some(msg.to_vec());
+        Err(Answer::NeedsClientCommit {
+            round: msg.to_vec(),
+        })
+    }
+
+    /// The client's half is here: one call opens the round, answers it, and
+    /// closes it — as on the stand. Stand/test-only like [`Session::initiate`]:
+    /// the product path keeps no half inside and signs over the wire
+    /// (`NeedsClientCommit` / `NeedsShare`), so outside the stand and tests
+    /// this closes over the caller-provided half the reader holds in its own
+    /// process — never over a half that crossed into the module.
+    fn sign_client_local(&mut self, msg: &[u8]) -> Result<Vec<Signature>, Answer> {
         let Some(mobile) = &self.mobile else {
             return Err(self.missing(Party::Client, msg));
         };
@@ -1453,7 +1600,107 @@ impl Session {
             })
     }
 
-    /// The owner signs with its own key — or, while a command waits for the
+    /// "Sign this round": the round bytes the mobile side signs — the
+    /// container's package over the waiting message.
+    fn needs_share(&self, round: &SigningRound) -> Answer {
+        let bytes = match round.to_bytes() {
+            Ok(b) => b,
+            Err(e) => {
+                return Answer::Refused {
+                    reason: format!("the round does not encode: {e}"),
+                }
+            }
+        };
+        Answer::NeedsShare { round: bytes }
+    }
+
+    /// The message the wire round signs, if a command opened one: the reader
+    /// commits to it first. `None` when no command waits for a commitment.
+    fn client_round_msg(&mut self) -> Option<Vec<u8>> {
+        self.client_round_msg.clone()
+    }
+
+    /// The mobile side's commitment comes in: the container opens its side
+    /// of the round over the message [`Answer::NeedsClientCommit`] carried.
+    /// The answer carries the round the mobile side signs.
+    ///
+    /// A commitment with a round already open — or with no message waiting
+    /// for one — is refused: one round at a time, and only for a command
+    /// that asked.
+    fn client_commit(&mut self, raw: &[u8]) -> Answer {
+        if self.client_round.is_some() {
+            return Answer::Refused {
+                reason: "a client round is already open: answer it with a share".into(),
+            };
+        }
+        let Some(open) = self.client_round_msg() else {
+            return Answer::Refused {
+                reason: "no client round waits for a commitment".into(),
+            };
+        };
+        let commitment = match Commitment::from_bytes(raw) {
+            Ok(c) => c,
+            Err(e) => {
+                return Answer::Refused {
+                    reason: format!("the commitment does not read: {e}"),
+                }
+            }
+        };
+        let mut rng = CspRng;
+        let round = match self.container.begin_signing(&open, &commitment, &mut rng) {
+            Ok(r) => r,
+            Err(e) => {
+                self.client_round = None;
+                return Answer::Refused {
+                    reason: format!("the container opens no round: {e}"),
+                };
+            }
+        };
+        self.client_round_msg = None;
+        let answer = self.needs_share(&round);
+        self.client_round = Some(ClientRound {
+            msg: open,
+            commitment,
+            round,
+        });
+        answer
+    }
+
+    /// The mobile side's share comes in: the container adds its own and
+    /// closes the round, and the signatures wait for the command to be
+    /// repeated — the reader repeats it, and [`Session::sign_client`] picks
+    /// them up. A stranger's share does not verify and the round drops.
+    fn client_share(&mut self, raw: &[u8]) -> Answer {
+        let Some(open) = self.client_round.take() else {
+            return Answer::Refused {
+                reason: "no client round open".into(),
+            };
+        };
+        let share = match MobileShare::from_bytes(raw) {
+            Ok(s) => s,
+            Err(e) => {
+                return Answer::Refused {
+                    reason: format!("the share does not read: {e}"),
+                }
+            }
+        };
+        let mut rng = CspRng;
+        match self.container.finish_signing(&share, &mut rng) {
+            Ok(sigs) => {
+                let len = open.msg.len();
+                self.pending_client_sigs.push((open.msg, sigs));
+                Answer::Done {
+                    bytes: serde_json::to_vec(&serde_json::json!({
+                        "accepted": len,
+                    }))
+                    .unwrap_or_default(),
+                }
+            }
+            Err(e) => Answer::Refused {
+                reason: format!("the round does not close: {e}"),
+            },
+        }
+    }
     /// other party, with the signature the reader handed in
     /// ([`Request::Sign`]) over exactly the bytes it was asked for.
     fn sign_owner(&self, msg: &[u8]) -> Result<Signature, Answer> {
@@ -1468,7 +1715,7 @@ impl Session {
             }
         }
         match &self.owner {
-            Some(signer) => Ok(signer.sign(msg)),
+            Some(key) => Ok(key.signer().sign(msg)),
             None => Err(self.missing(Party::Owner, msg)),
         }
     }
@@ -1518,9 +1765,38 @@ impl Session {
         };
         event.covered = event.subject();
         let covered = event.covered.clone();
-        event.signatures = self.sign_all(&covered, who)?;
-        let (page, page_need) = self.opening_page_or(page)?;
-        let (status, status_need) = self.status_record(op)?;
+        match self.sign_all(&covered, who) {
+            Ok(sigs) => {
+                event.signatures = sigs;
+            }
+            Err(needs) => {
+                // The press stays open, the offsets stay ticked: a repeat
+                // re-signs the same bytes (И6б). A refusal drops them — its
+                // press wrote nothing and opens fresh next time.
+                if !Self::is_wait_answer(&needs) {
+                    self.press_offsets = PressOffsets::default();
+                }
+                return Err(needs);
+            }
+        }
+        let (page, page_need) = match self.opening_page_or(page) {
+            Ok(w) => w,
+            Err(needs) => {
+                if !Self::is_wait_answer(&needs) {
+                    self.press_offsets = PressOffsets::default();
+                }
+                return Err(needs);
+            }
+        };
+        let (status, status_need) = match self.status_record(op) {
+            Ok(w) => w,
+            Err(needs) => {
+                if !Self::is_wait_answer(&needs) {
+                    self.press_offsets = PressOffsets::default();
+                }
+                return Err(needs);
+            }
+        };
         let keys = self.container.roster().keys().clone();
         let at_ms = Some(self.clock_ms);
         self.container
@@ -1538,6 +1814,13 @@ impl Session {
             .map_err(|e| Answer::Refused {
                 reason: format!("refused: {e}"),
             })?;
+        self.press_offsets = PressOffsets::default();
+        self.pending_client_sigs.clear();
+        // The opening's offset went in with the press (see
+        // `Session::opening_page`): a later opening ticks fresh.
+        if !self.pending_opening {
+            self.pending_open_offset = None;
+        }
         if self.container.is_pro() {
             if let Some(need) = page_need {
                 self.pending_anchors.push_back(need);
@@ -1550,6 +1833,18 @@ impl Session {
             }
         }
         Ok(())
+    }
+
+    /// A `Needs*` answer that waits for the reader — the press stays open, a
+    /// repeated command resumes it — rather than a refusal, which drops it.
+    fn is_wait_answer(answer: &Answer) -> bool {
+        matches!(
+            answer,
+            Answer::NeedsClientCommit { .. }
+                | Answer::NeedsShare { .. }
+                | Answer::NeedsSignature { .. }
+                | Answer::NeedsAnchor { .. }
+        )
     }
 
     /// The page a command writes: page 0 through its own co-seal round trip,
@@ -1580,7 +1875,20 @@ impl Session {
             }
             PageToWrite::Record(kind, content) => (kind, content),
         };
-        let offset_ms = self.tick();
+        // A repeated command reuses the offsets its open press ticked (И6б):
+        // the draft — and the seal bytes the wire round signs — stays the
+        // same, so the closed round is picked up instead of a new one.
+        let offset_ms = match self.press_offsets.page_offsets.pop() {
+            Some(ticked) => {
+                self.press_offsets.page_offsets.push(ticked);
+                ticked
+            }
+            None => {
+                let ticked = self.tick();
+                self.press_offsets.page_offsets.push(ticked);
+                ticked
+            }
+        };
         let draft = self
             .container
             .draft_record(
@@ -1660,14 +1968,30 @@ impl Session {
             number: self.container.status_records() as u64,
             status: next,
             event: Some(event),
-            offset_ms: self.tick(),
+            // A repeated command reuses the offsets its open press ticked
+            // (И6б) — see `Session::page`.
+            offset_ms: match self.press_offsets.status_offsets.pop() {
+                Some(ticked) => {
+                    self.press_offsets.status_offsets.push(ticked);
+                    ticked
+                }
+                None => {
+                    let ticked = self.tick();
+                    self.press_offsets.status_offsets.push(ticked);
+                    ticked
+                }
+            },
             prev: self.container.status_head(),
             signatures: SignatureSet::default(),
         };
         let bytes = canonical_bytes(&record).map_err(|e| Answer::Refused {
             reason: format!("the status record does not encode: {e}"),
         })?;
-        record.signatures = if self.mobile.is_some() {
+        // The client's session signs through its halves — over the wire
+        // when the half is outside (И4г: no half inside, the status move
+        // answers `NeedsClientCommit` like `Work`); the owner's session
+        // with its key, as before.
+        record.signatures = if self.mobile.is_some() || self.owner.is_none() {
             SignatureSet::new(self.sign_client(&bytes)?)
         } else {
             SignatureSet::new(vec![self.sign_owner(&bytes)?])
@@ -1692,12 +2016,28 @@ impl Session {
     }
 }
 
+/// A client signature round waiting for the mobile side.
+///
+/// The message is what both halves sign; the commitment is the mobile side's
+/// half of the round the container opened. `ClientShare` checks the share
+/// against both, then the round is dropped — nonces are used once.
+#[derive(Debug)]
+struct ClientRound {
+    /// What both halves sign.
+    msg: Vec<u8>,
+    /// The mobile side's commitment the container opened the round with.
+    #[allow(dead_code)]
+    commitment: Commitment,
+    /// The container's answer: the package the mobile side signs.
+    round: SigningRound,
+}
+
 /// A session's close: the shared secrets part, the code, the state, the parts
 /// this map does not rewrite (`capsule::seal_into_capsule`).
 #[allow(clippy::too_many_arguments)]
 fn seal_parts(
     state: &[u8],
-    state_key: &[u8; 32],
+    state_key: &StateKey,
     template: Hash,
     artifact: &str,
     client: &str,
@@ -1710,7 +2050,7 @@ fn seal_parts(
 ) -> Result<Vec<u8>, String> {
     capsule::seal_into_capsule(
         state,
-        state_key,
+        state_key.bytes(),
         &template.to_multihash(),
         artifact,
         client,
@@ -1726,9 +2066,10 @@ fn seal_parts(
 
 impl Drop for Session {
     fn drop(&mut self) {
-        // The halves wipe themselves; the state key goes here, in one place a
-        // reader can point at.
-        self.state_key.zeroize();
+        // The halves wipe themselves; the state key and the owner key wipe
+        // through their own `Drop` — in one place a reader can point at.
+        // No manual loop over memory here: a copy the loop did not see
+        // would live on, while `ZeroizeOnDrop` covers the fields.
     }
 }
 
@@ -1795,7 +2136,7 @@ const fn side_role_name(role: SideRole) -> &'static str {
 /// The key's identifier is not in the file: the container's roster pins it, so
 /// the roster is where it comes from — and a seed that yields another key than
 /// the pinned one is refused rather than used.
-fn open_owner(container: &Container, half: &str) -> Result<Ed25519Signer, String> {
+fn open_owner(container: &Container, half: &str) -> Result<OwnerKey, String> {
     let pinned = container
         .roster()
         .holder(Role::Owner)
@@ -1806,7 +2147,7 @@ fn open_owner(container: &Container, half: &str) -> Result<Ed25519Signer, String
     if signer.public() != pinned {
         return Err("side file: the half is not the owner's key the roster pinned".into());
     }
-    Ok(signer)
+    Ok(OwnerKey::from_seed(signer, seed))
 }
 
 /// A map rebuilt from its public halves, for re-sealing its slot.

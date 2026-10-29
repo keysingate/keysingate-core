@@ -81,7 +81,7 @@ impl Drop for TempKey {
     }
 }
 
-fn mail_auth_body(shared: &Shared, id: &str, raw: &str) -> Vec<u8> {
+fn mail_auth_body(_shared: &Shared, id: &str, raw: &str) -> Vec<u8> {
     mail_body(id, raw)
 }
 

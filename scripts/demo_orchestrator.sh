@@ -158,6 +158,33 @@ STEP
   esac
 }
 
+# Step 10b-pre (J13): capsule noise before the agent works, for judge_page (2).
+# The claim scenario has no capsule step of its own, so the pair is assembled
+# by a print step exactly like scripts/demo_pro_capsule.sh (offline, no
+# network): `ksg-capsule init` + `initiate` in a scratch home under $WORK.
+# Best-effort under `set -e`: anything missing or failing leaves no snapshot
+# and the judge page renders the honest placeholder instead.
+CAPSULE_BEFORE=""
+CAPSULE_AFTER=""
+CAPSULE_SNAP_HOME="$WORK/capsule-snap"
+CAPSULE_BIN="$ROOT/target/release/ksg-capsule"
+[ -x "$CAPSULE_BIN" ] || CAPSULE_BIN="$ROOT/target/debug/ksg-capsule"
+CAPSULE_MOD="$ROOT/target/wasm32-unknown-unknown/release/ksg_capsule_module.wasm"
+if [ "${KSG_CLASS:-light}" = light ] && [ -x "$CAPSULE_BIN" ] && [ -f "$CAPSULE_MOD" ]; then
+  rm -rf "$CAPSULE_SNAP_HOME"
+  mkdir -p "$CAPSULE_SNAP_HOME"
+  if "$CAPSULE_BIN" --home "$CAPSULE_SNAP_HOME" init --class light --wasm "$CAPSULE_MOD" >/dev/null 2>&1 \
+    && "$CAPSULE_BIN" --home "$CAPSULE_SNAP_HOME" initiate >/dev/null 2>&1 \
+    && [ -f "$CAPSULE_SNAP_HOME/capsule.bin" ]; then
+    cp "$CAPSULE_SNAP_HOME/capsule.bin" "$WORK/capsule.before.bin" 2>/dev/null || true
+    [ -f "$WORK/capsule.before.bin" ] && CAPSULE_BEFORE="$WORK/capsule.before.bin" || true
+  else
+    echo "note: capsule print step failed before the agent run: section (2) will say so" >&2
+  fi
+else
+  echo "note: capsule step not in this run (needs light class + ksg-capsule binary/module): section (2) renders the placeholder" >&2
+fi
+
 ANSWERS_DIR="$WORK/answers"
 mkdir -p "$ANSWERS_DIR"
 # spec_demo_checklist item 3 (N7): the orchestrator records step→page here;
@@ -182,6 +209,11 @@ while [ "$STEP" -le "$LAST_STEP" ]; do
     { step_prompt 1; cat "$CASE"; } >"$PROMPT_FILE"
   else
     step_prompt "$STEP" >"$PROMPT_FILE"
+  fi
+  if [ "$STEP" -eq 6 ]; then
+    # The export range comes from the orchestrator, not from the agent's memory.
+    LAST_PAGE=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(max(d.values()) if d else 0)' "$STEPS_JSON")
+    echo "Pages to export and verify: 1 through $LAST_PAGE." >>"$PROMPT_FILE"
   fi
   ATTEMPT=0
   while :; do
@@ -254,6 +286,13 @@ PY
     echo "step $STEP attempt $ATTEMPT cut or empty (gw rc=$GW_RC): retrying once" >&2
   done
   rm -f "$PROMPT_FILE"
+  if [ "$STEP" -eq 1 ] && [ ! -s "$WORK/.current" ]; then
+    # The agent's ksg MCP keeps the run's container in KSG_WORK/.current. No file
+    # here means the agent writes somewhere else (another KSG_WORK) or runs an
+    # old ksg_mcp.py — every later step would land in another container.
+    echo "step 1: no $WORK/.current — the agent's ksg MCP does not write to this KSG_WORK (or is an old ksg_mcp.py): stop" >&2
+    exit 1
+  fi
   if [ "$STEP" -eq "$LAST_STEP" ]; then STEP7_ANSWER="$STEP_ANSWER"; fi
   STEP=$((STEP + 1))
 done
@@ -304,3 +343,131 @@ python3 "$ROOT/scripts/judge_explain.py" --name "$NAME" --work "$WORK" "${PAGES[
 echo
 echo "explanation of the agent: $EXPLANATION"
 echo "answer of the agent: $ANSWER"
+
+
+# Step 10a (J12): the expert re-asks SAM 3.1 for the mask page's box and
+# compares the mask byte for byte; the verdict JSON feeds judge_page --mask-json.
+# Best-effort under `set -e`: a MISMATCH (exit 1) or a missing mask page must not
+# abort the run — judge_page renders the recheck state either way.
+MASK_JSON="$WORK/mask_recheck.json"
+MASK_PAGE=$(ROOT="$ROOT" python3 - "$BOX" <<'PY'
+import os
+import sys
+sys.path.insert(0, os.path.join(os.environ["ROOT"], "scripts"))
+from judge_page import page_kind, read_pages
+box = sys.argv[1]
+hit = ""
+try:
+    import glob as _g
+    found = read_pages(box)
+    for number in sorted(found):
+        if page_kind(found[number].get("text", "")) == "SAM mask":
+            cands = sorted(_g.glob(os.path.join(box, "page-%d.json" % number)))
+            if cands:
+                hit = cands[0]
+                break
+except Exception:
+    pass
+sys.stdout.write(hit)
+PY
+)
+if [ -n "${MASK_PAGE:-}" ]; then
+  python3 "$ROOT/scripts/expert_recheck_mask.py" --page "$MASK_PAGE" \
+    --image "$ROOT/demo/damage_4417.png" --json "$MASK_JSON" || true
+else
+  echo "note: no SAM mask page under $BOX: mask recheck skipped" >&2
+fi
+
+# Step 10b-post (J13): capsule noise after the export — one offline print step
+# (`work`, like scripts/demo_pro_capsule.sh, no network) so before/after differ.
+# Best-effort under `set -e`: a failed print still snapshots the capsule as-is.
+if [ -n "${CAPSULE_BEFORE:-}" ] && [ -d "$CAPSULE_SNAP_HOME" ]; then
+  "$CAPSULE_BIN" --home "$CAPSULE_SNAP_HOME" work "print: claim evidence snapshot for the judge (synthetic)" >/dev/null 2>&1 || true
+  cp "$CAPSULE_SNAP_HOME/capsule.bin" "$WORK/capsule.after.bin" 2>/dev/null || true
+  [ -f "$WORK/capsule.after.bin" ] && CAPSULE_AFTER="$WORK/capsule.after.bin" || true
+fi
+
+# Step 10d (J14): tamper check — a copy of the export with one byte flipped in
+# one page must be REJECTED by ksg-verify-v2; the verdict JSON feeds
+# judge_page --tamper-json ("tampered copy: REJECTED, reason ...").
+# Best-effort under `set -e`: anything missing never aborts the run —
+# judge_page renders the placeholder/unavailable state instead.
+TAMPER_JSON="$WORK/tamper_recheck.json"
+FIRST_PAGE=$(ls "$BOX"/page-*.json 2>/dev/null | sort | head -1 || true)
+if [ -n "${FIRST_PAGE:-}" ]; then
+  TAMPER_COPY="$WORK/tampered-$(basename "$FIRST_PAGE")"
+  cp "$FIRST_PAGE" "$TAMPER_COPY" 2>/dev/null || true
+  KSG_VERIFY_BIN="${KSG_VERIFY:-$ROOT/target/release/ksg-verify-v2}"
+  [ -x "$KSG_VERIFY_BIN" ] || KSG_VERIFY_BIN="$ROOT/target/debug/ksg-verify-v2"
+  TAMPER_PAGE_NUM=$(basename "$FIRST_PAGE" .json); TAMPER_PAGE_NUM=${TAMPER_PAGE_NUM#page-}
+  BOX_ID=""; [ -f "$BOX/h/container.json" ] && BOX_ID=$(python3 -c "import json;print(json.load(open('$BOX/h/container.json')).get('id',''))" 2>/dev/null || true)
+  python3 - "$TAMPER_COPY" "$TAMPER_PAGE_NUM" "$TAMPER_JSON" "$KSG_VERIFY_BIN" "$BOX" "$BOX_ID" "${KSG_CLASS:-light}" "$TAMPER_COPY" <<'PY' || true
+import json
+import subprocess
+import sys
+copy_path, page_num, out_json, verify_bin, box, box_id, klass, src = sys.argv[1:8]
+verdict = {"exists": True, "tampered_page": page_num, "source": src,
+           "accepted": None, "verdict": "not checked", "reason": ""}
+try:
+    raw = open(copy_path, "rb").read()
+    if raw:
+        pos = len(raw) // 2
+        raw = raw[:pos] + bytes([(raw[pos] + 1) % 256]) + raw[pos + 1:]
+        open(copy_path, "wb").write(raw)
+    else:
+        verdict["reason"] = "empty page file, nothing to flip"
+        raise RuntimeError("empty")
+except RuntimeError:
+    pass
+except Exception as exc:
+    verdict["reason"] = "tamper flip failed: %s" % exc
+else:
+    import os
+    keys = os.path.join(box, "keys.json")
+    if os.path.exists(verify_bin) and os.access(verify_bin, os.X_OK) and box_id and os.path.exists(keys):
+        try:
+            proc = subprocess.run([verify_bin, "--export", copy_path,
+                                   "--container", box_id, "--keys", keys,
+                                   "--class", klass],
+                                  capture_output=True, text=True, timeout=120)
+            report = (proc.stdout + proc.stderr).strip()
+            first = report.splitlines()[0] if report else "empty verify output"
+            verdict["accepted"] = report.startswith("ACCEPTED")
+            verdict["verdict"] = "ACCEPTED" if verdict["accepted"] else "REJECTED"
+            verdict["reason"] = first[:300]
+        except Exception as exc:
+            verdict["reason"] = "verify error: %s" % exc
+    else:
+        verdict["reason"] = "not checked (no binary/keys/container id)"
+try:
+    open(out_json, "w").write(json.dumps(verdict))
+except Exception:
+    pass
+PY
+else
+  echo "note: no exported pages under $BOX: tamper check skipped" >&2
+fi
+
+# Step 10 (J8): static judge page for the hackathon — no server, EN, opens from
+# file. Reads the exported pages, the explanation text and ksg-verify-v2
+# verdicts; section (2) shows the capsule before/after pair, or — when this run
+# has no capsule step — the honest placeholder (capsule step not in this run).
+if [ -n "${CAPSULE_BEFORE:-}" ] && [ -n "${CAPSULE_AFTER:-}" ]; then
+  python3 "$ROOT/scripts/judge_page.py" --work "$WORK" --box "$BOX" \
+    --text "$EXPLANATION" --class "${KSG_CLASS:-light}" \
+    --mask-json "$MASK_JSON" \
+    --tamper-json "$TAMPER_JSON" \
+    --steps "$STEPS_JSON" \
+    --capsule-before "$CAPSULE_BEFORE" --capsule-after "$CAPSULE_AFTER" \
+    --out "$ROOT/demo/out/judge.html"
+else
+  echo "note: capsule step not in this run: judge page section (2) renders the placeholder" >&2
+  python3 "$ROOT/scripts/judge_page.py" --work "$WORK" --box "$BOX" \
+    --text "$EXPLANATION" --class "${KSG_CLASS:-light}" \
+    --mask-json "$MASK_JSON" \
+    --tamper-json "$TAMPER_JSON" \
+    --steps "$STEPS_JSON" \
+    --out "$ROOT/demo/out/judge.html"
+fi
+echo
+echo "judge page: $ROOT/demo/out/judge.html"

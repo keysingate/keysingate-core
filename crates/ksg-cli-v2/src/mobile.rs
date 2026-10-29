@@ -134,6 +134,10 @@ pub fn serve<C: Consent>(
         if line.trim().is_empty() {
             continue;
         }
+        // The stand path holds no birth: a birth line before the half is
+        // refused, and a round line is answered over the half read from the
+        // file. `handle_line` refuses birth lines itself; the wire stays one
+        // line in, one line out.
         let mut out = handle_line(&mut session, &line, &mut OsRng);
         out.push('\n');
         output
@@ -214,4 +218,30 @@ impl Drop for ChildMobile {
         drop(self.stdin.take());
         let _ = self.child.wait();
     }
+}
+
+/// A birth exchange over the page wire: the birth's two crossings ride the
+/// same request line the signing rounds ride after the initiation.
+///
+/// The page holds the birth's secret the way it holds the round's nonces —
+/// nothing of either crosses. What crosses is public by the birth's design:
+/// the hello out, the container's answer back, the share home. `expected`
+/// names which crossing the answer must be: the page's birth automaton and
+/// the reader move in lockstep, and a line of the other kind where a birth
+/// line belongs is the other side's bug.
+///
+/// # Errors
+///
+/// The page refuses, answers late, or answers what was not asked for.
+pub fn birth_exchange(
+    call: &mut dyn FnMut(&Request) -> Result<Vec<u8>, String>,
+    line: &Request,
+    expected: ksg_mobile_v2::BirthOp,
+) -> Result<Vec<u8>, String> {
+    let is_birth =
+        ksg_mobile_v2::describe_birth(&serde_json::to_string(line).map_err(|e| e.to_string())?);
+    if is_birth != Some(expected) {
+        return Err("the page's birth answers out of step".into());
+    }
+    call(line)
 }
