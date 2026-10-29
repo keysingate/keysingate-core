@@ -71,6 +71,13 @@ fi
 # block after its STEP line. Step→page recording ($KSG_WORK/steps.json) is the
 # next stage (N7); step 9 below re-discovers the pages the agent exported.
 STEP_TIMEOUT=300
+# Steps that call Muse Spark / SAM 3.1 or export+verify every page take longer.
+step_timeout() {
+  case "$1" in
+    3|4|6|7) echo 600 ;;
+    *) echo "$STEP_TIMEOUT" ;;
+  esac
+}
 LAST_STEP=7
 
 # step_prompt <n>: print the prompt for step <n> on stdout. Every step is
@@ -157,6 +164,13 @@ mkdir -p "$ANSWERS_DIR"
 # judge_page.py --steps reads it in N8. Written fresh on every run.
 STEPS_JSON="$WORK/steps.json"
 echo '{}' >"$STEPS_JSON"
+# One agent session for the whole checklist: step 1 opens it, every later step
+# continues it (A2A contextId), so the agent keeps the claim in its context.
+CTX_FILE="$WORK/context_id"
+rm -f "$CTX_FILE"
+# Seconds per step (for the judge page and the anchoring-time budget).
+TIMES_JSON="$WORK/step_times.json"
+echo '{}' >"$TIMES_JSON"
 STEP=1
 STEP7_ANSWER=""
 while [ "$STEP" -le "$LAST_STEP" ]; do
@@ -178,10 +192,26 @@ while [ "$STEP" -le "$LAST_STEP" ]; do
         echo "Retry note: if step $STEP is already done and its page is written, do NOT do it again — just reply STEP $STEP OK page=<the number of the page you already wrote>."
       } >>"$PROMPT_FILE"
     fi
+    T0=$(date +%s)
     set +e
-    "$ROOT/scripts/gw_ask.sh" "$AGENT" "$PROMPT_FILE" "$STEP_TIMEOUT" >"$STEP_ANSWER" 2>"$STEP_ANSWER.err"
+    if [ -s "$CTX_FILE" ]; then
+      GW_CONTEXT_ID=$(cat "$CTX_FILE") "$ROOT/scripts/gw_ask.sh" "$AGENT" "$PROMPT_FILE" "$(step_timeout "$STEP")" >"$STEP_ANSWER" 2>"$STEP_ANSWER.err"
+    else
+      GW_CONTEXT_OUT="$CTX_FILE" "$ROOT/scripts/gw_ask.sh" "$AGENT" "$PROMPT_FILE" "$(step_timeout "$STEP")" >"$STEP_ANSWER" 2>"$STEP_ANSWER.err"
+    fi
     GW_RC=$?
     set -e
+    python3 - "$TIMES_JSON" "$STEP" "$ATTEMPT" "$(( $(date +%s) - T0 ))" "$GW_RC" <<'PY'
+import json, sys
+path, step, attempt, secs, rc = sys.argv[1:]
+try:
+    data = json.load(open(path))
+except Exception:
+    data = {}
+data.setdefault(step, []).append({"attempt": int(attempt), "seconds": int(secs), "gw_rc": int(rc)})
+json.dump(data, open(path, "w"), indent=1, sort_keys=True)
+PY
+    echo "step $STEP attempt $ATTEMPT: $(( $(date +%s) - T0 )) s (gw rc=$GW_RC)" >&2
     # N10: the STEP line may sit anywhere in the answer (no newline before
     # it), so it is searched anywhere — no ^ anchor — and the OK/FAIL verdict
     # plus page=<n> are read from that line, not from the whole answer.

@@ -25,17 +25,36 @@ AUTH=()
 
 if [ "$SRC" = "-" ]; then TEXT=$(cat); else TEXT=$(cat "$SRC"); fi
 
-START=$(python3 -I -c '
-import json, sys
+# GW_CONTEXT_ID: continue the agent's session from an earlier task (A2A contextId);
+# GW_CONTEXT_OUT: file to write the task's contextId to (for the next call).
+# "stream capacity exhausted" (the agent's single slot is still held by the
+# previous task) is not a failure: wait and resend, up to GW_BUSY_WAIT seconds.
+BUSY_UNTIL=$(( $(date +%s) + ${GW_BUSY_WAIT:-120} ))
+while :; do
+  START=$(python3 -I -c '
+import json, os, sys
+msg = {"role": "user", "parts": [{"kind": "text", "text": sys.argv[1]}]}
+ctx = os.environ.get("GW_CONTEXT_ID", "")
+if ctx: msg["contextId"] = ctx
 print(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "message/send",
-  "params": {"message": {"role": "user", "parts": [{"kind": "text", "text": sys.argv[1]}]},
-             "configuration": {"blocking": False}}}, ensure_ascii=False))' "$TEXT" \
-  | curl -sS --max-time 60 "${AUTH[@]}" -X POST "$URL" -H 'Content-Type: application/json' --data-binary @-)
+  "params": {"message": msg, "configuration": {"blocking": False}}}, ensure_ascii=False))' "$TEXT" \
+    | curl -sS --max-time 60 "${AUTH[@]}" -X POST "$URL" -H 'Content-Type: application/json' --data-binary @-)
+  if printf '%s' "$START" | grep -q 'capacity exhausted' && [ "$(date +%s)" -lt "$BUSY_UNTIL" ]; then
+    echo "agent busy (previous task still holds the slot): waiting 10 s" >&2
+    sleep 10
+    continue
+  fi
+  break
+done
 
 TASK=$(printf '%s' "$START" | python3 -I -c '
-import json, sys
+import json, os, sys
 d = json.load(sys.stdin)
 if "error" in d: sys.exit("gateway error: " + json.dumps(d["error"], ensure_ascii=False))
+out = os.environ.get("GW_CONTEXT_OUT", "")
+ctx = d["result"].get("contextId") or d["result"].get("context_id") or ""
+if out and ctx:
+    open(out, "w").write(ctx)
 print(d["result"]["id"])')
 echo "task $TASK started" >&2
 
@@ -48,7 +67,12 @@ import json, sys
 d = json.load(sys.stdin)
 print(d.get("result", {}).get("status", {}).get("state", "error"))')
   if [ "$STATE" != "working" ]; then break; fi
-  if [ "$(date +%s)" -ge "$DEADLINE" ]; then echo "timeout: task $TASK still working" >&2; exit 2; fi
+  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+    # Cancel the task so the agent's slot is free for a retry (no double work).
+    curl -sS --max-time 15 "${AUTH[@]}" -X POST "$URL" -H 'Content-Type: application/json' \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tasks/cancel\",\"params\":{\"id\":\"$TASK\"}}" >/dev/null 2>&1 || true
+    echo "timeout: task $TASK still working: cancelled" >&2; exit 2
+  fi
   sleep 5
 done
 
