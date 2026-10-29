@@ -327,7 +327,7 @@ def steps_block(steps, pages, verdicts):
     if not steps:
         return "<p>Steps not recorded (no --steps).</p>"
     if not steps.get("exists", True):
-        return ("<p>Steps unavailable: %s</p>"
+        return ('<p><span style="color:red">Steps unavailable</span>: %s</p>'
                 % htmlmod.escape(str(steps.get("reason", steps.get("path", "unknown")))))
     mapping = steps.get("mapping") or {}
     if not mapping:
