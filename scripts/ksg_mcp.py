@@ -66,6 +66,9 @@ mcp = FastMCP(
     "ksg",
     instructions="""Rules (always on): never print keys or secrets; never touch another container;
 never edit container files by hand - only through these tools;
+never open the secrets folder, never read key files;
+one step = one tool call = one page = one reply line `STEP <n> OK page=<p>`
+(or `STEP <n> FAIL <reason>`); never two steps in one answer;
 a refused call means stop and report;
 before the first work with a container read the skill docs/skills/ksg-container/SKILL.md.""",
 )

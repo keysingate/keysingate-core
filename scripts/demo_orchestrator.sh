@@ -63,43 +63,158 @@ if [ -z "${MODEL_API_KEY:-}" ]; then
   echo "the agent-written mode below (judge_explain.py --text) needs no key" >&2
 fi
 
-ANSWER=$(mktemp /tmp/ksg-answer.XXXXXX.txt)
+# Steps of the demo (ops/supervisor/spec_demo_checklist.md item 1): each step is
+# a SEPARATE gateway task with a short timeout (<=300 s) and one retry on a
+# cut or empty answer. The agent's reply to a step is exactly one line
+# `STEP <n> OK page=<p>` (or `STEP <n> FAIL <reason>`); the page itself is
+# written through the `ksg` MCP tools. The last step appends the EXPLANATION
+# block after its STEP line. Step→page recording ($KSG_WORK/steps.json) is the
+# next stage (N7); step 9 below re-discovers the pages the agent exported.
+STEP_TIMEOUT=300
+LAST_STEP=7
 
-TASK=$(cat <<'TASK'
-New task. You are an insurance claims agent. Every step of your work must be recorded
-as a journal page with the ksg tools, at the moment you take it:
-1. Call ksg_get_container once; keep the returned name (it is the `name` argument below).
-2. ksg_write_page: "input: ..." — the claim as you read it.
-3. ksg_write_page: "tool call: policy_lookup(P-88) -> ..." — the clauses you rely on.
-4. ksg_model_call(name, prompt="...", tool_args={...}) — ask Muse Spark to read the
-   evidence and name the clause; the tool journals the call itself (model, sha256 of
-   the request, sha256 of the answer, the arguments, the time) and tells you the page
-   number. Quote its answer in the next page.
-5. ksg_mask_damage(name, image_path="demo/damage_4417.png", box=[600, 380, 1120, 1080])
-   — one damage picture; the tool journals the model, sha256 of the picture, the box
-   and sha256 of the mask, and tells you the page number.
-6. ksg_write_page: "result: ..." — the decision, the reason and the clause.
-7. ksg_export_page for every page you wrote (1 through the last number the tools gave
-   you), then ksg_verify each file.
-8. Last step, and part of your reply: finish the answer with a block that starts with
-   the line `EXPLANATION:` — the decision explained to the hackathon judge in plain
-   language, no jargon, at most 120 words. Every statement in it must carry a
-   citation `[p:N]` to its own page, N being a page you wrote above. The program
-   checks those links; a citation of a page that does not exist is a failed demo.
-Reply with: the container name and identifier, the decision, and for each exported page
-its number, its file and whether it was ACCEPTED — then the `EXPLANATION:` block. The
-case (synthetic data):
+# step_prompt <n>: print the prompt for step <n> on stdout. Every step is
+# self-contained (the gateway may start a fresh task): it re-opens the
+# container with ksg_get_container and does exactly one tool step.
+step_prompt() {
+  case "$1" in
+    1) cat <<'STEP'
+New task. You are an insurance claims agent. Record this step as a journal page
+with the ksg tools, at the moment you take it:
+1. Call ksg_get_container once (it returns the existing container if there is
+   one); keep the returned name (it is the `name` argument below).
+2. ksg_write_page: "input: ..." — the claim as you read it (the case is
+   appended below).
+Reply with exactly one line: `STEP 1 OK page=<p>` where <p> is the page number
+the tool gave you. The case (synthetic data):
+STEP
+      ;;
+    2) cat <<'STEP'
+New task. You are an insurance claims agent. Record this step as a journal page:
+1. Call ksg_get_container once (returns the existing container); keep `name`.
+2. ksg_write_page: "tool call: policy_lookup(P-88) -> ..." — the clauses you
+   rely on for the claim (water damage, apartment 4417, policy P-88).
+Reply with exactly one line: `STEP 2 OK page=<p>`.
+STEP
+      ;;
+    3) cat <<'STEP'
+New task. You are an insurance claims agent:
+1. Call ksg_get_container once (returns the existing container); keep `name`.
+2. ksg_model_call(name, prompt="...", tool_args={...}) — ask Muse Spark to read
+   the evidence (claim: water damage, apartment 4417, policy P-88) and name the
+   clause; the tool journals the call itself (model, sha256 of the request,
+   sha256 of the answer, the arguments, the time) and tells you the page
+   number. Quote its answer in the next page (ksg_write_page).
+Reply with exactly one line: `STEP 3 OK page=<p>` where <p> is the quote page.
+STEP
+      ;;
+    4) cat <<'STEP'
+New task. You are an insurance claims agent:
+1. Call ksg_get_container once (returns the existing container); keep `name`.
+2. ksg_mask_damage(name, image_path="demo/damage_4417.png",
+   box=[600, 380, 1120, 1080]) — one damage picture; the tool journals the
+   model, sha256 of the picture, the box and sha256 of the mask, and tells you
+   the page number.
+Reply with exactly one line: `STEP 4 OK page=<p>`.
+STEP
+      ;;
+    5) cat <<'STEP'
+New task. You are an insurance claims agent:
+1. Call ksg_get_container once (returns the existing container); keep `name`.
+2. ksg_write_page: "result: ..." — the decision, the reason and the clause
+   (claim: water damage, apartment 4417, policy P-88).
+Reply with exactly one line: `STEP 5 OK page=<p>`.
+STEP
+      ;;
+    6) cat <<'STEP'
+New task. You are an insurance claims agent:
+1. Call ksg_get_container once (returns the existing container); keep `name`.
+2. ksg_export_page for every page you wrote (1 through the last number the
+   tools gave you), then ksg_verify each file.
+Reply with exactly one line: `STEP 6 OK page=<p>` where <p> is the last page
+you exported and verified ACCEPTED.
+STEP
+      ;;
+    7) cat <<'STEP'
+New task. You are an insurance claims agent. Last step, and part of your reply:
+1. Call ksg_get_container once (returns the existing container).
+2. Finish the answer with a block that starts with the line `EXPLANATION:` —
+   the decision explained to the hackathon judge in plain language, no jargon,
+   at most 120 words. Every statement in it must carry a citation `[p:N]` to
+   its own page, N being a page you wrote above. The program checks those
+   links; a citation of a page that does not exist is a failed demo.
+First line of your reply: `STEP 7 OK`. Then the `EXPLANATION:` block. Also
+report: the container name and identifier, the decision, and for each exported
+page its number, its file and whether it was ACCEPTED.
+STEP
+      ;;
+  esac
+}
 
-TASK
-)
+ANSWERS_DIR="$WORK/answers"
+mkdir -p "$ANSWERS_DIR"
+# spec_demo_checklist item 3 (N7): the orchestrator records step→page here;
+# judge_page.py --steps reads it in N8. Written fresh on every run.
+STEPS_JSON="$WORK/steps.json"
+echo '{}' >"$STEPS_JSON"
+STEP=1
+STEP7_ANSWER=""
+while [ "$STEP" -le "$LAST_STEP" ]; do
+  PROMPT_FILE=$(mktemp /tmp/ksg-step.XXXXXX.txt)
+  if [ "$STEP" -eq 1 ]; then
+    { step_prompt 1; cat "$CASE"; } >"$PROMPT_FILE"
+  else
+    step_prompt "$STEP" >"$PROMPT_FILE"
+  fi
+  ATTEMPT=0
+  while :; do
+    ATTEMPT=$((ATTEMPT + 1))
+    STEP_ANSWER="$ANSWERS_DIR/step-$STEP.attempt-$ATTEMPT.txt"
+    set +e
+    "$ROOT/scripts/gw_ask.sh" "$AGENT" "$PROMPT_FILE" "$STEP_TIMEOUT" >"$STEP_ANSWER" 2>"$STEP_ANSWER.err"
+    GW_RC=$?
+    set -e
+    if [ "$GW_RC" -eq 0 ] && grep -qE "^STEP $STEP OK" "$STEP_ANSWER"; then
+      echo "step $STEP OK (attempt $ATTEMPT): $(grep -E "^STEP $STEP OK" "$STEP_ANSWER" | head -1)"
+      # N7: record step→page (step 7 has no page — its line is bare `STEP 7 OK`).
+      PAGE=$(grep -oE "page=[0-9]+" "$STEP_ANSWER" | head -1 | cut -d= -f2 || true)
+      python3 - "$STEPS_JSON" "$STEP" "${PAGE:-}" <<'PY'
+import json, sys
+path, step, page = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(path) as f:
+        data = json.load(f)
+except Exception:
+    data = {}
+if page:
+    data[str(step)] = int(page)
+with open(path, "w") as f:
+    json.dump(data, f, indent=1, sort_keys=True)
+PY
+      break
+    fi
+    if [ "$GW_RC" -eq 0 ] && grep -qE "^STEP $STEP FAIL" "$STEP_ANSWER"; then
+      echo "step $STEP refused by the agent: $(grep -E "^STEP $STEP FAIL" "$STEP_ANSWER" | head -1)" >&2
+      echo "the agent's answer: $STEP_ANSWER" >&2
+      rm -f "$PROMPT_FILE"
+      exit 1
+    fi
+    # A cut task (timeout, an agent crash) or an empty answer: retry once.
+    if [ "$ATTEMPT" -ge 2 ]; then
+      echo "step $STEP gave no usable answer twice (gw rc=$GW_RC): not retrying" >&2
+      echo "the agent's partial answer: $STEP_ANSWER" >&2
+      rm -f "$PROMPT_FILE"
+      exit 1
+    fi
+    echo "step $STEP attempt $ATTEMPT cut or empty (gw rc=$GW_RC): retrying once" >&2
+  done
+  rm -f "$PROMPT_FILE"
+  if [ "$STEP" -eq "$LAST_STEP" ]; then STEP7_ANSWER="$STEP_ANSWER"; fi
+  STEP=$((STEP + 1))
+done
 
-# A task the gateway cut (first-chunk timeout, an agent crash) leaves pages half
-# written: the explanation of step 9 would then stand on an unfinished run.
-if ! { printf '%s\n' "$TASK"; cat "$CASE"; } | "$ROOT/scripts/gw_ask.sh" "$AGENT" - 1800 | tee "$ANSWER"; then
-  echo "the agent did not complete the task: no explanation is made from a cut run" >&2
-  echo "the agent's partial answer: $ANSWER" >&2
-  exit 1
-fi
+# Step 9 reads the explanation from the last step's answer.
+ANSWER="$STEP7_ANSWER"
 
 # Step 9: the explanation for the judge, written by the agent itself (Muse Spark).
 # This script only cuts the `EXPLANATION:` block out of the agent's answer and lets

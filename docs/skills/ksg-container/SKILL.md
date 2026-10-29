@@ -54,6 +54,9 @@ Work with a `bare` container only through the `ksg` MCP tools
 5. `bare` proves *who* wrote a page and that it was untouched — never
    *when* (no anchors; see `core-v2/docs/bare.md`). Keep pages small;
    journal holds 1000 pages; idle term 730 days empty, 365 days with work.
+6. One step = one tool call = one page = one reply line: after each tool
+   call reply exactly `STEP <n> OK page=<p>` (or `STEP <n> FAIL <reason>`);
+   never do two steps in one answer.
 
 ## Export & verify
 
