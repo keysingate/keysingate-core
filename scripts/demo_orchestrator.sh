@@ -170,14 +170,26 @@ while [ "$STEP" -le "$LAST_STEP" ]; do
   while :; do
     ATTEMPT=$((ATTEMPT + 1))
     STEP_ANSWER="$ANSWERS_DIR/step-$STEP.attempt-$ATTEMPT.txt"
+    if [ "$ATTEMPT" -ge 2 ]; then
+      # N10: idempotent retry — the first attempt may have written the page
+      # but its answer got cut. Tell the agent not to redo the step.
+      {
+        echo
+        echo "Retry note: if step $STEP is already done and its page is written, do NOT do it again — just reply STEP $STEP OK page=<the number of the page you already wrote>."
+      } >>"$PROMPT_FILE"
+    fi
     set +e
     "$ROOT/scripts/gw_ask.sh" "$AGENT" "$PROMPT_FILE" "$STEP_TIMEOUT" >"$STEP_ANSWER" 2>"$STEP_ANSWER.err"
     GW_RC=$?
     set -e
-    if [ "$GW_RC" -eq 0 ] && grep -qE "^STEP $STEP OK" "$STEP_ANSWER"; then
-      echo "step $STEP OK (attempt $ATTEMPT): $(grep -E "^STEP $STEP OK" "$STEP_ANSWER" | head -1)"
+    # N10: the STEP line may sit anywhere in the answer (no newline before
+    # it), so it is searched anywhere — no ^ anchor — and the OK/FAIL verdict
+    # plus page=<n> are read from that line, not from the whole answer.
+    STEP_LINE=$(grep -oE "STEP $STEP (OK|FAIL)[^[:cntrl:]]*" "$STEP_ANSWER" | tail -1 || true)
+    if [ "$GW_RC" -eq 0 ] && [ -n "$STEP_LINE" ] && echo "$STEP_LINE" | grep -qE "STEP $STEP OK"; then
+      echo "step $STEP OK (attempt $ATTEMPT): $STEP_LINE"
       # N7: record step→page (step 7 has no page — its line is bare `STEP 7 OK`).
-      PAGE=$(grep -oE "page=[0-9]+" "$STEP_ANSWER" | head -1 | cut -d= -f2 || true)
+      PAGE=$(echo "$STEP_LINE" | grep -oE "page=[0-9]+" | head -1 | cut -d= -f2 || true)
       python3 - "$STEPS_JSON" "$STEP" "${PAGE:-}" <<'PY'
 import json, sys
 path, step, page = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -193,8 +205,8 @@ with open(path, "w") as f:
 PY
       break
     fi
-    if [ "$GW_RC" -eq 0 ] && grep -qE "^STEP $STEP FAIL" "$STEP_ANSWER"; then
-      echo "step $STEP refused by the agent: $(grep -E "^STEP $STEP FAIL" "$STEP_ANSWER" | head -1)" >&2
+    if [ "$GW_RC" -eq 0 ] && [ -n "$STEP_LINE" ] && echo "$STEP_LINE" | grep -qE "STEP $STEP FAIL"; then
+      echo "step $STEP refused by the agent: $STEP_LINE" >&2
       echo "the agent's answer: $STEP_ANSWER" >&2
       rm -f "$PROMPT_FILE"
       exit 1
