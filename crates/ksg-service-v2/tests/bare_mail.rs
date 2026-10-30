@@ -16,7 +16,7 @@
 //! The DKIM-refusal-keeps-request test below needs no live DNS: whether the
 //! refusal comes from "no key for `example.com`" or from "no network", the
 //! unsigned forged letter always fails closed with 403 while the request
-//! stays pending (С13 `find_match` + consume-after-DKIM, С14 double-From
+//! stays pending (S13 `find_match` + consume-after-DKIM, S14 double-From
 //! guard).
 //!
 //! Contact values below are `example.com` placeholders, never real holders.
@@ -150,7 +150,7 @@ fn mail_malformed_is_400() {
     }
 }
 
-/// С17: without the worker bearer secret `mail` refuses with 401 before any
+/// S17: without the worker bearer secret `mail` refuses with 401 before any
 /// parsing — no header, wrong scheme, wrong secret, or no secret file.
 #[test]
 fn mail_worker_secret_is_required() {
@@ -235,7 +235,7 @@ fn mail_foreign_from_is_404() {
 
 #[test]
 fn mail_dkim_refusal_keeps_request_pending() {
-    // С13: an unsigned forged letter always fails closed (403) without
+    // S13: an unsigned forged letter always fails closed (403) without
     // consuming the request — the true owner can still deliver later. No
     // live DNS needed: `example.com` never passes either way.
     let _guard = env_lock().lock().expect("env lock");
@@ -259,7 +259,7 @@ fn mail_dkim_refusal_keeps_request_pending() {
 
 #[test]
 fn mail_double_from_is_400() {
-    // С14: two `From` headers or two addresses in one `From` → 400, and the
+    // S14: two `From` headers or two addresses in one `From` → 400, and the
     // request stays pending (never consumed by a malformed letter).
     let _guard = env_lock().lock().expect("env lock");
     let _key = temp_key();

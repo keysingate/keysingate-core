@@ -1,4 +1,4 @@
-//! Orchestrator `challenge` / `proof` tests (этап 11, in-process).
+//! Orchestrator `challenge` / `proof` tests (stage 11, in-process).
 //!
 //! The tests drive `Shared::bare_route` in-process — no network port, no
 //! signer, no database. `challenge` never leaves the process; `proof` cases

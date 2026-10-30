@@ -1,4 +1,4 @@
-//! `bare` issuance, этап 1: routes without a database.
+//! `bare` issuance, stage 1: routes without a database.
 //!
 //! The tests drive `Shared::bare_route` in-process — no network port, no
 //! signer, no database. Contact values (email / did:web) never reach logs.

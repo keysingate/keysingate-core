@@ -191,7 +191,7 @@ pub struct Shared {
     rpc: Box<dyn Rpc + Send + Sync>,
     legal: Vec<String>,
     bare: Mutex<BareLedger>,
-    /// Pending orchestrator challenges (этап 9: in-memory, ten minutes each).
+    /// Pending orchestrator challenges (stage 9: in-memory, ten minutes each).
     orch: Mutex<OrchLedger>,
     /// Request threads now inside an outgoing call (`did.json`, RPC).
     outbound: AtomicUsize,
@@ -388,7 +388,7 @@ fn err(code: u16, msg: impl Into<String>) -> Reply {
     Reply(code, json!({"error": msg.into()}))
 }
 
-/// One pending `bare` issuance request (этапы 1+6, in-memory).
+/// One pending `bare` issuance request (stages 1+6, in-memory).
 ///
 /// `expect` is the `holder_hmac` of the applicant's contact: the contact
 /// value itself is never stored, even in memory. `None` when the HMAC key
@@ -427,9 +427,9 @@ pub const DID_JSON_WELL_KNOWN: &str = ".well-known/did.json";
 /// Where the applicant sends the six-digit code for manual verification.
 const BARE_SEND_TO: &str = "verify@keysingate.com";
 
-/// In-memory ledger of pending `bare` requests (этап 1: no database).
+/// In-memory ledger of pending `bare` requests (stage 1: no database).
 ///
-/// `issued` stays zero until этап 2 wires a database; the store keeps only
+/// `issued` stays zero until stage 2 wires a database; the store keeps only
 /// pending requests, each for [`BARE_TTL_MS`].
 #[derive(Default)]
 pub struct BareLedger {
@@ -573,14 +573,14 @@ impl BareLedger {
         self.take_by_id(&id)
     }
 
-    /// How many certificates were issued (этап 1: always zero, no database).
+    /// How many certificates were issued (stage 1: always zero, no database).
     #[must_use]
     pub fn issued(&self) -> u64 {
         0
     }
 }
 
-/// One pending orchestrator challenge (этап 9, in-memory).
+/// One pending orchestrator challenge (stage 9, in-memory).
 ///
 /// `did_web` is the domain's full `did:web:...` identifier; `code` is the
 /// random challenge to sign. The record itself carries no key material.
@@ -590,7 +590,7 @@ struct OrchEntry {
     expires_ms: u64,
 }
 
-/// In-memory ledger of pending orchestrator challenges (этап 9).
+/// In-memory ledger of pending orchestrator challenges (stage 9).
 ///
 /// The store keeps only the challenge each domain must answer, each for
 /// [`ORCH_TTL_MS`]: one challenge works once.
@@ -1073,7 +1073,7 @@ impl Shared {
         Reply(200, json!({"notices": notices, "dropped": dropped}))
     }
 
-    /// Starts one `bare` issuance request (этап 1, in-memory).
+    /// Starts one `bare` issuance request (stage 1, in-memory).
     ///
     /// The contact value (email or `did:web`) is validated and never logged.
     fn bare_start(&self, body: &[u8], now: u64) -> Reply {
@@ -1100,7 +1100,7 @@ impl Shared {
         }
     }
 
-    /// The `mail` intake (этап 6, owner mail only).
+    /// The `mail` intake (stage 6, owner mail only).
     ///
     /// The Email Worker posts the raw message it received on the verify
     /// address plus the pending request id: `{"id", "raw"}` where `raw` is
@@ -1168,7 +1168,7 @@ impl Shared {
         }
     }
 
-    /// Issues one orchestrator challenge (этап 9).
+    /// Issues one orchestrator challenge (stage 9).
     ///
     /// The caller names the domain's `did:web` identifier; the answer is the
     /// challenge id and the random code the domain's `did.json` key must
@@ -1194,7 +1194,7 @@ impl Shared {
         }
     }
 
-    /// Checks one orchestrator proof (этап 9).
+    /// Checks one orchestrator proof (stage 9).
     ///
     /// The caller answers the challenge id with the code signed by the key
     /// named in the domain's `did.json`: `{"id", "signature"}` where
@@ -1260,12 +1260,12 @@ impl Shared {
 pub const BARE_DATABASE_URL_ENV: &str = "KSG_BARE_DATABASE_URL";
 /// The current `bare` release id (row in `releases`).
 pub const BARE_RELEASE_ENV: &str = "KSG_BARE_RELEASE";
-/// The domain this worker may issue orchestrator `bare` for (этап 9).
+/// The domain this worker may issue orchestrator `bare` for (stage 9).
 ///
 /// The proof step checks the challenge's domain against this value: a worker
 /// configured for one domain cannot spend its secret on another.
 pub const BARE_WORKER_DOMAIN_ENV: &str = "KSG_BARE_WORKER_DOMAIN";
-/// The file holding the Email Worker bearer secret (этап 17).
+/// The file holding the Email Worker bearer secret (stage 17).
 ///
 /// The worker sends `Authorization: Bearer <secret>`; the secret lives in a
 /// file named by this variable, never in code. Compared in constant time.
@@ -1372,7 +1372,7 @@ fn insert_bare_orch_issuance(did_web: &str, domain: &str) -> Result<i32, Reply> 
     )
 }
 
-/// The address of a domain's `did.json` (этап 9).
+/// The address of a domain's `did.json` (stage 9).
 ///
 /// `did:web:<host>` (no path) reads `https://<host>/.well-known/did.json`;
 /// `did:web:<host>:<path...>` reads `https://<host>/<path...>/did.json`.
@@ -1492,7 +1492,7 @@ fn public_addrs(netloc: &str) -> std::io::Result<Vec<std::net::SocketAddr>> {
     Ok(addrs)
 }
 
-/// The domain's verification key from its `did.json` (этап 9).
+/// The domain's verification key from its `did.json` (stage 9).
 ///
 /// Fetches the document over HTTPS (`did_json_url`) with a bounded timeout,
 /// takes the first `verificationMethod` entry carrying an Ed25519 key in
@@ -1690,7 +1690,7 @@ impl Shared {
 
     /// How many `bare` certificates were issued.
     fn bare_count(&self) -> Reply {
-        // TODO(этап 2: БД): count issued certificates from the database once
+        // TODO(stage 2: DB): count issued certificates from the database once
         // issuance persists past process memory.
         Reply(200, json!({"issued": lock(&self.bare).issued()}))
     }
@@ -1793,7 +1793,7 @@ impl Rpc for NoRpc {
 /// no network port is opened and no signer or database is needed. The `email`
 /// / `did:web` contact values are validated and never logged.
 impl Shared {
-    /// Creates an empty shared state for the `bare` routes (этап 1: no DB).
+    /// Creates an empty shared state for the `bare` routes (stage 1: no DB).
     ///
     /// # Errors
     ///
