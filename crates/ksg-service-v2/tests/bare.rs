@@ -81,3 +81,45 @@ fn started_request_is_pending() {
     assert_eq!(r.status(), 200);
     assert_eq!(r.body()["state"].as_str().unwrap(), "pending");
 }
+
+fn start_email(s: &Shared, email: &str, now: u64) -> ksg_service_v2::server::Reply {
+    let body = format!(r#"{{"email":"{email}"}}"#);
+    s.bare_route("POST", "/v1/bare/start", body.as_bytes(), now)
+}
+
+#[test]
+fn fourth_request_of_one_contact_is_429() {
+    let s = shared();
+    for _ in 0..ksg_service_v2::server::BARE_MAX_PER_CONTACT {
+        assert_eq!(start_email(&s, "user@example.com", T0).status(), 200);
+    }
+    // Case does not dodge the limit.
+    assert_eq!(start_email(&s, "USER@example.com", T0).status(), 429);
+    // Another contact is not affected.
+    assert_eq!(start_email(&s, "other@example.com", T0).status(), 200);
+    // After expiry the contact may ask again.
+    let later = T0 + ksg_service_v2::server::BARE_TTL_MS + 1;
+    assert_eq!(start_email(&s, "user@example.com", later).status(), 200);
+}
+
+#[test]
+fn full_ledger_is_429_and_evicts_nobody() {
+    let s = shared();
+    let r = start_email(&s, "first@example.com", T0);
+    assert_eq!(r.status(), 200);
+    let first = r.body()["id"].as_str().unwrap().to_owned();
+    for i in 1..ksg_service_v2::server::BARE_MAX_PENDING {
+        assert_eq!(
+            start_email(&s, &format!("u{i}@example.com"), T0).status(),
+            200,
+            "#{i}"
+        );
+    }
+    assert_eq!(start_email(&s, "late@example.com", T0).status(), 429);
+    let r = s.bare_route("GET", &format!("/v1/bare/status/{first}"), &[], T0);
+    assert_eq!(r.status(), 200, "the oldest pending request survives");
+    assert_eq!(r.body()["state"].as_str().unwrap(), "pending");
+    // Once they expire, room is back.
+    let later = T0 + ksg_service_v2::server::BARE_TTL_MS + 1;
+    assert_eq!(start_email(&s, "late@example.com", later).status(), 200);
+}

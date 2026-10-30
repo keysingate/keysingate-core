@@ -332,7 +332,22 @@ struct BareEntry {
     code: String,
     expires_ms: u64,
     expect: Option<[u8; 32]>,
+    /// Keyed hash of the contact (per-process random key): counts the
+    /// pending requests of one contact without keeping the contact itself.
+    contact_key: u64,
 }
+
+/// The most pending `bare` requests the service keeps at once. Past it a new
+/// request is refused with 429 — nobody else's pending request is evicted.
+pub const BARE_MAX_PENDING: usize = 10_000;
+/// The most pending `bare` requests one contact may hold at once.
+pub const BARE_MAX_PER_CONTACT: usize = 3;
+/// The most pending orchestrator challenges the service keeps at once.
+pub const ORCH_MAX_PENDING: usize = 10_000;
+/// The most pending challenges one `did:web` may hold at once.
+pub const ORCH_MAX_PER_DOMAIN: usize = 3;
+/// The prefix of a ledger refusal that means "full, try later" (HTTP 429).
+pub const LEDGER_BUSY: &str = "busy:";
 
 /// How long a `bare` request stays pending: thirty minutes.
 pub const BARE_TTL_MS: u64 = 30 * 60 * 1000;
@@ -353,12 +368,15 @@ const BARE_SEND_TO: &str = "verify@keysingate.com";
 #[derive(Default)]
 pub struct BareLedger {
     entries: HashMap<String, BareEntry>,
-}impl BareLedger {
+    keyer: std::collections::hash_map::RandomState,
+}
+impl BareLedger {
     /// Creates an empty ledger.
     #[must_use]
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),
+            keyer: std::collections::hash_map::RandomState::new(),
         }
     }
 
@@ -393,6 +411,29 @@ pub struct BareLedger {
             (None, Some(d)) => d,
             _ => return Err("email or did_web: malformed contact".to_owned()),
         };
+        // Bounded before any work: the sweep below is O(n) with n at most
+        // BARE_MAX_PENDING, and a full ledger refuses instead of evicting.
+        self.entries.retain(|_, e| e.expires_ms > now);
+        let contact_key = {
+            use std::hash::BuildHasher;
+            self.keyer.hash_one(contact.to_ascii_lowercase())
+        };
+        if self.entries.len() >= BARE_MAX_PENDING {
+            return Err(format!(
+                "{LEDGER_BUSY} too many pending requests; try again later"
+            ));
+        }
+        if self
+            .entries
+            .values()
+            .filter(|e| e.contact_key == contact_key)
+            .count()
+            >= BARE_MAX_PER_CONTACT
+        {
+            return Err(format!(
+                "{LEDGER_BUSY} this contact already has pending requests; try again later"
+            ));
+        }
         let mut id_raw = [0u8; 16];
         let mut code_raw = [0u8; 4];
         OsRng
@@ -413,12 +454,15 @@ pub struct BareLedger {
         }
         let code = String::from_utf8_lossy(&code).into_owned();
         let expect = hmac_key.map(|k| crate::bare_db::holder_hmac(k, contact));
-        self.entries.retain(|_, e| e.expires_ms > now);
-        self.entries.insert(id.clone(), BareEntry {
-            expires_ms: now.saturating_add(BARE_TTL_MS),
-            code: code.clone(),
-            expect,
-        });
+        self.entries.insert(
+            id.clone(),
+            BareEntry {
+                expires_ms: now.saturating_add(BARE_TTL_MS),
+                code: code.clone(),
+                expect,
+                contact_key,
+            },
+        );
         Ok((id, code))
     }
 
@@ -508,6 +552,23 @@ impl OrchLedger {
         if !valid_did_web(did_web) {
             return Err("did_web: malformed contact".to_owned());
         }
+        self.entries.retain(|_, e| e.expires_ms > now);
+        if self.entries.len() >= ORCH_MAX_PENDING {
+            return Err(format!(
+                "{LEDGER_BUSY} too many pending challenges; try again later"
+            ));
+        }
+        if self
+            .entries
+            .values()
+            .filter(|e| e.did_web.eq_ignore_ascii_case(did_web))
+            .count()
+            >= ORCH_MAX_PER_DOMAIN
+        {
+            return Err(format!(
+                "{LEDGER_BUSY} this domain already has pending challenges; try again later"
+            ));
+        }
         let mut id_raw = [0u8; 16];
         let mut code_raw = [0u8; 32];
         OsRng
@@ -516,12 +577,14 @@ impl OrchLedger {
             .map_err(|_| "no randomness".to_owned())?;
         let id = hex::encode(id_raw);
         let code = hex::encode(code_raw);
-        self.entries.retain(|_, e| e.expires_ms > now);
-        self.entries.insert(id.clone(), OrchEntry {
-            did_web: did_web.to_owned(),
-            code: code.clone(),
-            expires_ms: now.saturating_add(ORCH_TTL_MS),
-        });
+        self.entries.insert(
+            id.clone(),
+            OrchEntry {
+                did_web: did_web.to_owned(),
+                code: code.clone(),
+                expires_ms: now.saturating_add(ORCH_TTL_MS),
+            },
+        );
         Ok((id, code))
     }
 
@@ -959,6 +1022,7 @@ impl Shared {
             crate::bare_db::load_hmac_key().ok().as_deref().map(|k| k.as_slice()),
         ) {
             Ok((id, code)) => Reply(200, json!({"id": id, "code": code, "send_to": BARE_SEND_TO})),
+            Err(e) if e.starts_with(LEDGER_BUSY) => err(429, e),
             Err(e) => err(400, e),
         }
     }
@@ -1052,6 +1116,7 @@ impl Shared {
         let mut ledger = lock(&self.orch);
         match ledger.start(&b.did_web, now) {
             Ok((id, code)) => Reply(200, json!({"id": id, "code": code})),
+            Err(e) if e.starts_with(LEDGER_BUSY) => err(429, e),
             Err(e) => err(400, e),
         }
     }

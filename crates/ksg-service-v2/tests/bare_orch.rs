@@ -205,3 +205,19 @@ fn orch_bad_signature_and_domain_limit_is_manual_stand() {
          with the same stand run twice; run by hand"
     );
 }
+
+#[test]
+fn orch_fourth_challenge_of_one_domain_is_429() {
+    let s = shared();
+    for _ in 0..ksg_service_v2::server::ORCH_MAX_PER_DOMAIN {
+        start_for(&s, "did:web:example.com");
+    }
+    let r = s.bare_route(
+        "POST",
+        "/v1/bare/orchestrator/challenge",
+        &challenge_body("did:web:EXAMPLE.com"),
+        T0,
+    );
+    assert_eq!(r.status(), 429);
+    start_for(&s, "did:web:other.example");
+}
