@@ -293,7 +293,10 @@ fn the_service_anchors_registers_answers_a_look_and_survives_a_restart() {
     assert_eq!(code, 200, "{job}");
     let path = format!("/v1/anchor/{}", job["job"]);
     let mut state = Value::Null;
-    for _ in 0..30 {
+    // A deadline in time, not a count of tries: a slow machine waits
+    // longer, it does not fail (audit F-17).
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while std::time::Instant::now() < deadline {
         let (_, s) = signed(&url, &me, "GET", &path, &Value::Null);
         state = s;
         if state["state"] == "anchored" {
