@@ -1231,16 +1231,45 @@ fn issue_anchor_command(args: &[String]) -> Result<(), Failure> {
                     "base-rpc",
                     "base-contract",
                     "from-block",
+                    "sender",
                 ],
             )?;
             let rpc = ksg_verify_v2::solana::HttpRpc::new(need(&f, "base-rpc")?)?;
             ksg_verify_v2::base::check_chain(&rpc, ksg_verify_v2::base::BASE_SEPOLIA_CHAIN_ID)?;
-            let notes = ksg_verify_v2::base::notes(
-                &rpc,
-                &contract,
-                &ksg_anchor_v2::evm::note_kind(ANCHOR_TAG),
-                from_block_flag(&f)?,
-            )?;
+            let kind = ksg_anchor_v2::evm::note_kind(ANCHOR_TAG);
+            // `note` is open to anyone: with the issuers' addresses (`--sender
+            // 0x…,0x…`) the node returns their anchors only, and a flood of
+            // the same tag from strangers is never read or tried.
+            let notes = match f.get("sender") {
+                Some(list) => {
+                    let senders = list
+                        .split(',')
+                        .map(|a| {
+                            ksg_anchor_v2::evm::unhex(a.trim())
+                                .map_err(|e| e.to_string())
+                                .and_then(|b| {
+                                    <[u8; 20]>::try_from(b)
+                                        .map_err(|_| format!("--sender {a}: not 20 bytes"))
+                                })
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(usage)?;
+                    ksg_verify_v2::base::notes_from(
+                        &rpc,
+                        &contract,
+                        &kind,
+                        &senders,
+                        from_block_flag(&f)?,
+                    )?
+                }
+                None => {
+                    eprintln!(
+                        "note: no --sender: anchors of every sender are read (a stranger's \
+                         flood of this tag slows the check)"
+                    );
+                    ksg_verify_v2::base::notes(&rpc, &contract, &kind, from_block_flag(&f)?)?
+                }
+            };
             let mut seen = 0usize;
             for n in &notes {
                 let Ok(memo) = std::str::from_utf8(&n.data) else {

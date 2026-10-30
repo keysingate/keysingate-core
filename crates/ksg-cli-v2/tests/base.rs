@@ -1525,3 +1525,40 @@ fn an_anchor_landed_unconfirmed_is_settled_before_the_next_anchor() {
     assert!(base_cfg(&home)["pending"].is_null());
     assert_eq!(count(&node, &home), before + 2);
 }
+
+/// `note` is open to every sender (`KsgAnchors.note`): a stranger can put
+/// notes of the issuance tag too. With `--sender` the check asks the node
+/// for the issuers' notes only — the stranger's are neither read nor taken
+/// for an issuance.
+#[test]
+fn the_issuance_check_reads_only_the_named_issuers() {
+    let d = Dir::new("issue-senders");
+    let node = MockBase::start();
+    let issuer = key_file(&d, "issuer.key", 0x43);
+    let stranger = key_file(&d, "stranger.key", 0x44);
+    let check = d.p("check.key");
+    std::fs::write(&check, hex::encode([0x77u8; 32])).unwrap();
+    let contract = node.contract();
+    let run = |sub: &str, docs: &str, extra: &[&str]| {
+        let mut a = vec![
+            "issue-anchor", sub, "--check-key", &check, "--docs", docs,
+            "--release", "ksg:em:test:000001", "--version", "0.2",
+            "--base-rpc", &node.url, "--base-contract", &contract,
+        ];
+        a.extend_from_slice(extra);
+        ok(&a)
+    };
+    run("put", "email:alice@example.com", &["--evm-key", &issuer, "--year", "2026"]);
+    // The stranger floods the tag, one of them shaped like a real issuance.
+    run("put", "email:bob@example.com", &["--evm-key", &stranger, "--year", "2026"]);
+    run("put", "email:carol@example.com", &["--evm-key", &stranger, "--year", "2026"]);
+
+    let issuers = ksg_anchor_v2::evm::hex0x(&evm_address(0x43));
+    let only = ["--sender", issuers.as_str()];
+    assert!(run("check", "email:alice@example.com", &only).contains("refused"));
+    let out = run("check", "email:bob@example.com", &only);
+    assert!(out.contains("free") && out.contains("(1 read)"), "{out}");
+    // Without --sender every note is read, the stranger's included.
+    let out = run("check", "email:dave@example.com", &[]);
+    assert!(out.contains("(3 read)"), "{out}");
+}

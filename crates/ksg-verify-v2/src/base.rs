@@ -175,11 +175,27 @@ pub fn logs(
     topics: &[[u8; 32]],
     from: u64,
 ) -> Result<Vec<Value>, String> {
-    let address = format!("0x{}", hex::encode(contract));
-    let topics: Vec<String> = topics
+    let topics: Vec<Value> = topics
         .iter()
-        .map(|t| format!("0x{}", hex::encode(t)))
+        .map(|t| Value::String(format!("0x{}", hex::encode(t))))
         .collect();
+    logs_where(rpc, contract, &topics, from)
+}
+
+/// As [`logs`], with each topic position given as the node takes it: a
+/// topic, or a list of them (any one matches). The filter runs on the node,
+/// so logs nobody asked for are never sent.
+///
+/// # Errors
+///
+/// As [`logs`].
+fn logs_where(
+    rpc: &dyn Rpc,
+    contract: &[u8; 20],
+    topics: &[Value],
+    from: u64,
+) -> Result<Vec<Value>, String> {
+    let address = format!("0x{}", hex::encode(contract));
     let ask = |lo: String, hi: String| -> Result<Vec<Value>, String> {
         let got = rpc.call(
             "eth_getLogs",
@@ -224,9 +240,46 @@ pub fn notes(
     kind: &[u8; 32],
     from_block: u64,
 ) -> Result<Vec<Note>, String> {
-    let logs = logs(rpc, contract, &[NOTED_TOPIC, *kind], from_block)?;
+    decode_notes(&logs(rpc, contract, &[NOTED_TOPIC, *kind], from_block)?)
+}
+
+/// Every note of `kind` sent by one of `senders`, since `from_block`.
+///
+/// `note` is open to every sender on the contract; the sender is an indexed
+/// topic, so the node drops everyone else's notes before answering — a
+/// stranger's flood of the same kind costs the reader nothing. No senders:
+/// no notes, without asking.
+///
+/// # Errors
+///
+/// As [`notes`].
+pub fn notes_from(
+    rpc: &dyn Rpc,
+    contract: &[u8; 20],
+    kind: &[u8; 32],
+    senders: &[[u8; 20]],
+    from_block: u64,
+) -> Result<Vec<Note>, String> {
+    if senders.is_empty() {
+        return Ok(Vec::new());
+    }
+    let word = |b: &[u8]| Value::String(format!("0x{}", hex::encode(b)));
+    let senders: Vec<Value> = senders
+        .iter()
+        .map(|a| {
+            let mut w = [0u8; 32];
+            w[12..].copy_from_slice(a);
+            word(&w)
+        })
+        .collect();
+    let topics = [word(&NOTED_TOPIC), word(kind), Value::Array(senders)];
+    let got = decode_notes(&logs_where(rpc, contract, &topics, from_block)?)?;
+    Ok(got)
+}
+
+fn decode_notes(logs: &[Value]) -> Result<Vec<Note>, String> {
     let mut out = Vec::new();
-    for l in &logs {
+    for l in logs {
         let topics = l
             .get("topics")
             .and_then(Value::as_array)
@@ -396,7 +449,9 @@ pub fn loss(
     // writer of the moment can, so the line of writers is the contract's word.
     let mut writers = earlier_writers(rpc, contract, key, from_block)?;
     writers.push(h.writer);
-    let commits: Vec<[u8; 32]> = notes(rpc, contract, &kind_of(SHARE_TAG), from_block)?
+    // Only the writers' notes are asked for: a flood of commitments from
+    // anyone else never reaches this reader.
+    let commits: Vec<[u8; 32]> = notes_from(rpc, contract, &kind_of(SHARE_TAG), &writers, from_block)?
         .into_iter()
         .filter(|n| writers.contains(&n.sender) && n.data.len() == 64 && n.data[..32] == key[..])
         .filter_map(|n| n.data[32..].try_into().ok())

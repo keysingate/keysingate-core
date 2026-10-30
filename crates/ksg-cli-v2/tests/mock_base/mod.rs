@@ -550,11 +550,19 @@ impl Chain {
                         return Err(format!("eth_getLogs is limited to a {span} block range"));
                     }
                 }
-                let topics: Vec<Vec<u8>> = f["topics"]
+                // A topic position is one topic or a list of them (any
+                // one matches), as on a real node.
+                let topics: Vec<Vec<Vec<u8>>> = f["topics"]
                     .as_array()
                     .map(|a| {
                         a.iter()
-                            .filter_map(|t| t.as_str().and_then(|s| unhex(s).ok()))
+                            .map(|t| match t {
+                                Value::Array(any) => any
+                                    .iter()
+                                    .filter_map(|x| x.as_str().and_then(|s| unhex(s).ok()))
+                                    .collect(),
+                                _ => t.as_str().and_then(|s| unhex(s).ok()).into_iter().collect(),
+                            })
                             .collect()
                     })
                     .unwrap_or_default();
@@ -568,7 +576,7 @@ impl Chain {
                         if topics
                             .iter()
                             .zip(ts)
-                            .all(|(want, have)| want.as_slice() == have.as_slice())
+                            .all(|(want, have)| want.iter().any(|w| w.as_slice() == have.as_slice()))
                         {
                             out.push(json!({"address": h(&self.contract), "topics": ts.iter().map(|t| h(t)).collect::<Vec<_>>(),
                                             "data": h(data), "blockNumber": hexnum(r.block)}));
