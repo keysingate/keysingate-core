@@ -86,66 +86,49 @@ LAST_STEP=7
 step_prompt() {
   case "$1" in
     1) cat <<'STEP'
-New task. You are an insurance claims agent. Record this step as a journal page
-with the ksg tools, at the moment you take it:
-1. Call ksg_get_container once (it returns the existing container if there is
-   one); keep the returned name (it is the `name` argument below).
-2. ksg_write_page: "input: ..." — the claim as you read it (the case is
-   appended below).
-Call the tools first; write nothing until they have returned. The last line
-of your reply is exactly `STEP 1 OK page=<p>` where <p> is the page number
-the tool gave you. The case (synthetic data):
+Call the tool ksg_get_container now. Then call the tool ksg_write_page with
+that `name` and the text "input: " followed by the insurance claim below as
+you read it (one short paragraph). Then reply with the exact JSON that
+ksg_write_page returned, nothing else.
+The claim (synthetic data):
 STEP
       ;;
     2) cat <<'STEP'
-New task. You are an insurance claims agent. Record this step as a journal page:
-1. Call ksg_get_container once (returns the existing container); keep `name`.
-2. ksg_write_page: "tool call: policy_lookup(P-88) -> ..." — the clauses you
-   rely on for the claim (water damage, apartment 4417, policy P-88).
-Call the tools first; write nothing until they have returned. The last line
-of your reply is exactly `STEP 2 OK page=<p>`.
+Call the tool ksg_get_container now. Then call the tool ksg_write_page with
+that `name` and the text "tool call: policy_lookup(P-88) -> " followed by the
+policy clauses you rely on for this claim (water damage, apartment 4417,
+policy P-88). Then reply with the exact JSON that ksg_write_page returned,
+nothing else.
 STEP
       ;;
     3) cat <<'STEP'
-New task. You are an insurance claims agent:
-1. Call ksg_get_container once (returns the existing container); keep `name`.
-2. ksg_model_call(name, prompt="...", tool_args={...}) — ask Muse Spark to read
-   the evidence (claim: water damage, apartment 4417, policy P-88) and name the
-   clause; the tool journals the call itself (model, sha256 of the request,
-   sha256 of the answer, the arguments, the time) and tells you the page
-   number. Quote its answer in the next page (ksg_write_page).
-Call the tools first; write nothing until they have returned. The last line
-of your reply is exactly `STEP 3 OK page=<p>` where <p> is the quote page.
+Call the tool ksg_get_container now. Then call the tool ksg_model_call with
+that `name`, a prompt asking Muse Spark to read the evidence (claim: water
+damage, apartment 4417, policy P-88) and name the clause that applies, and
+tool_args {"claim": "4417", "policy": "P-88"}. Then call the tool
+ksg_write_page with that `name` and the text "model answer: " followed by a
+quote of the model's answer. Then reply with the exact JSON that
+ksg_write_page returned, nothing else.
 STEP
       ;;
     4) cat <<'STEP'
-New task. You are an insurance claims agent:
-1. Call ksg_get_container once (returns the existing container); keep `name`.
-2. ksg_mask_damage(name, image_path="demo/damage_4417.png",
-   box=[600, 380, 1120, 1080]) — one damage picture; the tool journals the
-   model, sha256 of the picture, the box and sha256 of the mask, and tells you
-   the page number.
-Call the tools first; write nothing until they have returned. The last line
-of your reply is exactly `STEP 4 OK page=<p>`.
+Call the tool ksg_get_container now. Then call the tool ksg_mask_damage with
+that `name`, image_path "demo/damage_4417.png" and box [600, 380, 1120, 1080].
+Then reply with the exact JSON that ksg_mask_damage returned, nothing else.
 STEP
       ;;
     5) cat <<'STEP'
-New task. You are an insurance claims agent:
-1. Call ksg_get_container once (returns the existing container); keep `name`.
-2. ksg_write_page: "result: ..." — the decision, the reason and the clause
-   (claim: water damage, apartment 4417, policy P-88).
-Call the tools first; write nothing until they have returned. The last line
-of your reply is exactly `STEP 5 OK page=<p>`.
+Call the tool ksg_get_container now. Then call the tool ksg_write_page with
+that `name` and the text "result: " followed by the decision on the claim,
+the reason and the clause (claim: water damage, apartment 4417, policy P-88).
+Then reply with the exact JSON that ksg_write_page returned, nothing else.
 STEP
       ;;
     6) cat <<'STEP'
-New task. You are an insurance claims agent:
-1. Call ksg_get_container once (returns the existing container); keep `name`.
-2. ksg_export_page for every page you wrote (1 through the last number the
-   tools gave you), then ksg_verify each file.
-Call the tools first; write nothing until they have returned. The last line
-of your reply is exactly `STEP 6 OK page=<p>` where <p> is the last page
-you exported and verified ACCEPTED.
+Call the tool ksg_get_container now. Then, for every page number listed
+below, call the tool ksg_export_page with that `name` and the number, and
+then the tool ksg_verify with that `name` and the returned file. Then reply
+with the exact JSON that the last ksg_verify returned, nothing else.
 STEP
       ;;
     7) cat <<'STEP'
@@ -278,15 +261,16 @@ while [ "$STEP" -le "$LAST_STEP" ]; do
   if [ "$STEP" -eq 6 ]; then
     # The export range comes from the orchestrator, not from the agent's memory.
     LAST_PAGE=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(max(d.values()) if d else 0)' "$STEPS_JSON")
-    echo "Pages to export and verify: 1 through $LAST_PAGE." >>"$PROMPT_FILE"
+    PAGE_LIST=$(python3 -c 'import json,sys; print(", ".join(str(v) for v in sorted(set(json.load(open(sys.argv[1])).values()))))' "$STEPS_JSON")
+    echo "Pages: $PAGE_LIST." >>"$PROMPT_FILE"
   fi
   # Every page step must show in the journal (1.6a): said so to the agent too.
-  cat >>"$PROMPT_FILE" <<'NOTE'
-This step is done only by calling the ksg tools named above — a reply with
-no tool call does nothing. The page number must be the one a ksg tool
-returned in THIS step. The orchestrator reads the container's journal after
-your reply: a STEP line without the tool call behind it is a failed step.
+  if [ "$STEP" -lt "$LAST_STEP" ]; then
+    cat >>"$PROMPT_FILE" <<'NOTE'
+This is done only by calling the tools: a reply without the tool calls does
+nothing. The orchestrator reads the container's journal after your reply.
 NOTE
+  fi
   BEFORE_PAGES=$(journal_pages)
   ATTEMPT=0
   while :; do
@@ -324,6 +308,13 @@ PY
     # it), so it is searched anywhere — no ^ anchor — and the OK/FAIL verdict
     # plus page=<n> are read from that line, not from the whole answer.
     STEP_LINE=$(grep -oE "STEP $STEP (OK|FAIL)[^[:cntrl:]]*" "$STEP_ANSWER" | tail -1 || true)
+    # 1.6c (diag16c, 30.10): steps 1-6 ask for the tool's own JSON, not a
+    # STEP line (a STEP-line template got answered without the tool call).
+    # The page is the one the tool returned; the journal check below decides.
+    if [ -z "$STEP_LINE" ] && [ "$GW_RC" -eq 0 ] && [ "$STEP" -lt "$LAST_STEP" ]; then
+      JPAGE=$(grep -oE '"page"[[:space:]]*:[[:space:]]*[0-9]+' "$STEP_ANSWER" | tail -1 | grep -oE '[0-9]+$' || true)
+      STEP_LINE="STEP $STEP OK${JPAGE:+ page=$JPAGE}"
+    fi
     WHY=""
     if [ "$GW_RC" -eq 0 ] && [ -n "$STEP_LINE" ] && echo "$STEP_LINE" | grep -qE "STEP $STEP OK"; then
       PAGE=$(echo "$STEP_LINE" | grep -oE "page=[0-9]+" | head -1 | cut -d= -f2 || true)
@@ -337,7 +328,7 @@ PY
         fi
         {
           echo
-          echo "Your previous reply said STEP $STEP OK, but $WHY. Call the ksg tools now as listed above; reply with the page number they return."
+          echo "Your previous reply did not do the step: $WHY. Call the tools now, exactly as listed above, and reply with the JSON the last tool returned."
         } >>"$PROMPT_FILE"
         continue
       }
