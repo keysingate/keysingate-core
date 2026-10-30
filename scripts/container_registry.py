@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Реестр функций ПО внутри контейнера и того, какими тестами они пройдены.
+"""Registry of software functions inside the container and which tests covered them.
 
-Внутри контейнера — два крейта: `ksg-container` (кнопки, цикл, слои, ключ
-клиента) и `ksg-journal` (журнал работы). Для каждой их функции реестр
-записывает, выполнялась ли она тестами и какими:
+Inside the container there are two crates: `ksg-container` (buttons, loop, layers,
+client key) and `ksg-journal` (operation log). For each of their functions the registry
+records whether tests executed it and which ones:
 
-  * модульные и интеграционные тесты — всё, кроме стенда;
-  * e2e — сценарии стенда (`tests/e2e_stand.rs`): вся жизнь контейнера через кнопки;
-  * смоук — `tests/smoke_stand.rs`.
+  * unit and integration tests — everything except the stand;
+  * e2e — stand scenarios (`tests/e2e_stand.rs`): the whole container life through buttons;
+  * smoke — `tests/smoke_stand.rs`.
 
-«Выполнялась» — факт из покрытия (`cargo llvm-cov`), а не из статического
-графа: в Rust граф вызовов не разрешает вызовы методов через получатель, и
-GitNexus видит из тестов лишь часть функций. GitNexus используется для описи:
-реестр сверяет список функций покрытия со списком символов индекса и называет
-расхождения.
+"Executed" is a coverage fact (`cargo llvm-cov`), not a static-graph fact:
+in Rust the call graph does not resolve method calls through the receiver, and
+GitNexus sees only some of the functions from tests. GitNexus is used for the inventory:
+the registry compares the coverage function list against the index symbol list and names
+the mismatches.
 
-Результат: `[doc:CONTAINER-FUNCTIONS]` (генерируется, руками не править) и
-`[doc:CONTAINER-FUNCTIONS-JSON]`; каталог вывода задаёт `KSG_DOCS_DIR`.
+Result: `[doc:CONTAINER-FUNCTIONS]` (generated, do not edit by hand) and
+`[doc:CONTAINER-FUNCTIONS-JSON]`; the output directory is set by `KSG_DOCS_DIR`.
 
-Требуется: `cargo-llvm-cov`, компонент `llvm-tools-preview`, `rustfilt`.
-Запуск из корня этого каталога (core v2): `python3 scripts/container_registry.py`.
-Код выхода 1 — если тест упал или какая-то операция кнопок не прошла на стенде.
+Requires: `cargo-llvm-cov`, the `llvm-tools-preview` component, `rustfilt`.
+Run from this directory root (core v2): `python3 scripts/container_registry.py`.
+Exit code 1 — if a test failed or some button operation did not pass on the stand.
 """
 
 import datetime
@@ -34,17 +34,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 IMPL = ROOT
-# С 01.10 ядро v2: журнал переехал в ядро (`ksg-core-v2`).
+# Since 01.10 core v2: the journal moved into the core (`ksg-core-v2`).
 CRATES = ('ksg-container-v2', 'ksg-core-v2')
-# Реестр — приватный документ, он лежит вне этого каталога: `[doc:CONTAINER-FUNCTIONS]`
-# и `[doc:CONTAINER-FUNCTIONS-JSON]`. Каталог вывода — KSG_DOCS_DIR.
+# The registry is a private document, it lives outside this directory: `[doc:CONTAINER-FUNCTIONS]`
+# and `[doc:CONTAINER-FUNCTIONS-JSON]`. The output directory is KSG_DOCS_DIR.
 REPO = ROOT.parent
 DOCS = Path(os.environ.get('KSG_DOCS_DIR', REPO / 'internal'))
 OUT_MD = DOCS / 'Reestr_funktsiy_konteynera.md'
 OUT_JSON = DOCS / 'reestr_funktsiy_konteynera.json'
 
-# Модули, через которые идёт нажатие кнопки: цикл §3.3 и всё, что он зовёт
-# на шагах 1–9. Функции этих модулей помечаются в реестре отдельно.
+# Modules the button press goes through: loop §3.3 and everything it calls
+# in steps 1–9. Functions of these modules are marked separately in the registry.
 BUTTON_PATH = {
     'ksg-container/src/command.rs', 'ksg-container/src/event.rs',
     'ksg-container/src/operation.rs', 'ksg-container/src/container.rs',
@@ -54,80 +54,80 @@ BUTTON_PATH = {
     'ksg-container/src/dispute.rs', 'ksg-container/src/seal.rs',
 }
 
-# Ветки, которые тестом не вызвать, с причиной. Не пропуск, а граница: реестр
-# выводит их отдельно. Ключ — (файл, имя функции по покрытию).
+# Branches no test can trigger, with the reason. Not a gap, but a boundary: the registry
+# prints them separately. Key — (file, function name as in coverage).
 UNREACHABLE = {
     # --- core v2 (since 01.10): ksg-container-v2 -----------------------------
     ('ksg-container-v2/src/noise.rs', 'ksg_container_v2::noise::pad::{closure#0}'):
-        'длина содержимого больше u32::MAX (4 ГиБ) — размер раскладки задаётся при печати и меньше',
+        'content length over u32::MAX (4 GiB) — the layout size is set at print time and is smaller',
     ('ksg-container-v2/src/client_key.rs', 'answer::{closure#0}'):
-        'FROST dkg::part2 отдаёт пакет второго раунда на каждый пакет первого; '
-        'пакет первого раунда один — мобильной стороны, и пакет для неё всегда есть',
+        'FROST dkg::part2 returns a round-two packet for each round-one packet; '
+        'there is a single round-one packet — from the mobile side, and its packet always exists',
     ('ksg-container-v2/src/client_key.rs', 'finish::{closure#1}'):
-        '`begin` ставит коммитмент клиента к единственному подписанту группы, если второго нет, '
-        'и FROST round2::sign отказывает раньше: коммитмент не свой. Тест '
+        '`begin` binds the client commitment to the only group signer when there is no second one, '
+        'and FROST round2::sign rejects earlier: the commitment is not its own. Test '
         '`registry_gaps.rs::a_stored_half_rewritten_to_sign_alone_signs_nothing`',
     ('ksg-container-v2/src/client_key.rs', 'client_public::{closure#0}'):
-        'ключ Ed25519 FROST сериализуется ровно в 32 байта',
+        'an Ed25519 FROST key serializes to exactly 32 bytes',
     ('ksg-container-v2/src/client_key.rs', 'share_public::{closure#0}'):
-        'доля проверки Ed25519 FROST сериализуется ровно в 32 байта',
+        'an Ed25519 FROST verification share serializes to exactly 32 bytes',
     ('ksg-container-v2/src/client_key.rs', 'sign_alone::{closure#0}'):
-        'секретная доля FROST сериализуется ровно в 32 байта',
+        'a FROST secret share serializes to exactly 32 bytes',
     ('ksg-container-v2/src/client_key.rs', 'sign_alone::{closure#1}'):
-        'секретная доля — канонический скаляр: FROST не читает неканонический при десериализации',
+        'a secret share is a canonical scalar: FROST does not read a non-canonical one on deserialization',
     ('ksg-container-v2/src/client_key.rs', 'from_bytes::{closure#1}'):
-        'срез из get(..4) в [u8; 4] — длина уже 4, преобразование не падает',
+        'a slice from get(..4) into [u8; 4] — the length is already 4, the conversion cannot fail',
     ('ksg-container-v2/src/client_key.rs', 'from_bytes::{closure#2}'):
-        'u32 в usize — не падает на платформах от 32 бит, а других у эталона нет',
+        'u32 into usize — cannot fail on 32-bit and wider platforms, and the reference has no others',
     ('ksg-container-v2/src/container.rs', 'to_state::{closure#0}'):
-        'сериализация элемента FROST падает только на нейтральной точке группы; FROST её не '
-        'десериализует, а у ключа от генератора вероятность ≈2^-252',
+        'FROST element serialization fails only on the neutral group point; FROST does not '
+        'deserialize it, and a generator-derived key hits it with probability ≈2^-252',
     ('ksg-container-v2/src/container.rs', 'to_state::{closure#1}'):
-        'то же для половины прежнего клиента: нейтральная точка не читается и не рождается',
+        'same for the previous client half: the neutral point is neither read nor born',
     ('ksg-container-v2/src/store.rs', 'seal_to_bytes::{closure#0}'):
-        'serde_json::to_vec состояния со строковыми ключами не падает',
+        'serde_json::to_vec of a state with string keys cannot fail',
     ('ksg-container-v2/src/store.rs', 'stored_len::{closure#0}'):
-        'serde_json::to_vec состояния со строковыми ключами не падает',
+        'serde_json::to_vec of a state with string keys cannot fail',
     ('ksg-container-v2/src/store.rs', 'stored_packed_len::{closure#0}'):
-        'serde_json::to_vec состояния со строковыми ключами не падает',
+        'serde_json::to_vec of a state with string keys cannot fail',
     ('ksg-container-v2/src/store.rs', 'seal_to_bytes::{closure#2}'):
-        'serde_json::to_vec подписи (три строковых поля) не падает',
+        'serde_json::to_vec of a signature (three string fields) cannot fail',
     ('ksg-container-v2/src/store.rs', 'seal_to_bytes::{closure#3}'):
-        'подпись ML-DSA-65 в JSON — около 4,5 КиБ, меньше u32::MAX',
+        'an ML-DSA-65 signature in JSON is about 4.5 KiB, below u32::MAX',
     # --- core v2: ksg-core-v2 -------------------------------------------------
     ('ksg-core-v2/src/crypto/sign.rs', 'ksg_core_v2::crypto::sign::verify_one::{closure#7}'):
-        'любые 1952 байта читаются как ключ ML-DSA-65: коэффициенты t1 по 10 бит, '
-        'все значения в диапазоне (fips204 pk_decode)',
+        'any 1952 bytes read as an ML-DSA-65 key: t1 coefficients are 10 bits each, '
+        'all values in range (fips204 pk_decode)',
     ('ksg-core-v2/src/doc/mod.rs', 'from_unix_ms::{closure#0}'):
-        'u64::MAX / 86_400_000 меньше i64::MAX',
+        'u64::MAX / 86_400_000 is below i64::MAX',
     ('ksg-core-v2/src/doc/mod.rs', 'millis_of::{closure#3}'):
-        'год не раньше 1970 проверен выше, число дней от эпохи не отрицательно',
+        'the year is checked above to be no earlier than 1970, the day count since the epoch is not negative',
     ('ksg-core-v2/src/journal/mod.rs', 'draft::{closure#0}'):
-        'больше 2^32 страниц в одной записи: `place` отказывает за ёмкостью зон (1102 страницы)',
+        'over 2^32 pages in one record: `place` rejects past zone capacity (1102 pages)',
     ('ksg-core-v2/src/journal/mod.rs', 'draft::{closure#1}'):
-        'больше 2^32 страниц в одной записи — больше 128 ГиБ тел в памяти; зоны держат 1102',
+        'over 2^32 pages in one record — over 128 GiB of bodies in memory; zones hold 1102',
     ('ksg-core-v2/src/journal/mod.rs', 'draft_record::{closure#1}'):
-        'больше 2^32 частей в записи: `draft_pages_only` раньше упирается в ёмкость зон',
+        'over 2^32 parts in a record: `draft_pages_only` hits zone capacity earlier',
     ('ksg-core-v2/src/journal/mod.rs', 'draft_pages_only::{closure#0}'):
-        'больше 2^32 страниц в одной записи: `place` отказывает за ёмкостью зон (1102 страницы)',
+        'over 2^32 pages in one record: `place` rejects past zone capacity (1102 pages)',
     ('ksg-core-v2/src/journal/mod.rs', 'draft_pages_only::{closure#1}'):
-        'больше 2^32 частей в одной записи — больше 128 ГиБ частей в памяти',
+        'over 2^32 parts in one record — over 128 GiB of parts in memory',
     ('ksg-core-v2/src/journal/mod.rs', 'export_one::{closure#0}'):
-        'u64 в usize падает только на 32-битной цели за 2^32, а журнала с такой страницей там нет',
+        'u64 into usize fails only on a 32-bit target past 2^32, and there is no journal with such a page there',
     ('ksg-core-v2/src/journal/mod.rs', 'export_one::{closure#1}'):
-        'страница найдена среди страниц журнала, а у цепочки лист на каждую страницу: '
-        'доказательство включения строится',
+        'the page was found among the journal pages, and the chain has a leaf per page: '
+        'the inclusion proof builds',
     ('ksg-core-v2/src/journal/mod.rs', 'export_pages::{closure#0}'):
-        'u64 в usize падает только на 32-битной цели за 2^32, а журнала с такой страницей там нет',
+        'u64 into usize fails only on a 32-bit target past 2^32, and there is no journal with such a page there',
     ('ksg-core-v2/src/journal/mod.rs', 'export_pages::{closure#1}'):
-        'страница найдена среди страниц журнала, а у цепочки лист на каждую страницу',
+        'the page was found among the journal pages, and the chain has a leaf per page',
     ('ksg-core-v2/src/journal/mod.rs', 'expert_pages::{closure#0}::{closure#0}'):
-        'u64 в usize падает только на 32-битной цели за 2^32, а журнала с такой страницей там нет',
+        'u64 into usize fails only on a 32-bit target past 2^32, and there is no journal with such a page there',
     ('ksg-core-v2/src/journal/mod.rs', 'expert_pages::{closure#0}::{closure#1}'):
-        'страница найдена среди страниц журнала, а у цепочки лист на каждую страницу',
+        'the page was found among the journal pages, and the chain has a leaf per page',
     ('ksg-core-v2/src/merkle/inclusion.rs',
      'ksg_core_v2::merkle::inclusion::inclusion_proof::{closure#0}'):
-        'u64 в usize падает только на 32-битной цели за 2^32 листьев, которых там не уместить',
+        'u64 into usize fails only on a 32-bit target past 2^32 leaves, which cannot fit there',
 }
 
 
@@ -135,12 +135,12 @@ def run(cmd, env=None, check=False):
     r = subprocess.run(cmd, cwd=IMPL, capture_output=True, text=True, env=env)
     if check and r.returncode != 0:
         sys.stderr.write(r.stdout[-4000:] + r.stderr[-4000:])
-        sys.exit(f'команда упала: {" ".join(cmd)}')
+        sys.exit(f'command failed: {" ".join(cmd)}')
     return r
 
 
 def coverage(label, test_args, extra_env=None):
-    """Один прогон тестов под покрытием. Возвращает (сводку тестов, функции)."""
+    """One coverage test run. Returns (test summary, functions)."""
     pkgs = [a for c in CRATES for a in ('-p', c)]
     env = dict(os.environ, **(extra_env or {}))
     run(['cargo', 'llvm-cov', 'clean', '--workspace'])
@@ -168,7 +168,7 @@ def demangle(names):
 
 
 def normalize(name):
-    """Имя функции без хеша и параметров обобщения — одно на все инстанциации."""
+    """Function name without hash and generic parameters — one for all instantiations."""
     name = name.split('::h')[0] if re.search(r'::h[0-9a-f]{16}$', name) else name
     prev = None
     while prev != name:
@@ -178,7 +178,7 @@ def normalize(name):
 
 
 def functions(raw):
-    """{(файл, имя): (строка, счётчик)} только для функций внутри контейнера."""
+    """{(file, name): (line, counter)} only for functions inside the container."""
     picked = [f for f in raw if any(f'{c}/src/' in f['filenames'][0] for c in CRATES)]
     names = demangle([f['name'] for f in picked])
     out = {}
@@ -193,7 +193,7 @@ def functions(raw):
 
 
 def gitnexus_inventory():
-    """Функции в индексе GitNexus по крейтам контейнера, если индекс есть."""
+    """Functions in the GitNexus index for the container crates, if the index exists."""
     runner = REPO / '.gitnexus' / 'run.cjs'
     if not runner.exists():
         return None
@@ -210,7 +210,7 @@ def gitnexus_inventory():
 
 
 def operations():
-    """Операции кнопок: имя → кнопка, из таблицы `Operation::button`."""
+    """Button operations: name → button, from the `Operation::button` table."""
     src = (IMPL / 'crates/ksg-container-v2/src/operation.rs').read_text()
     body = src[src.index('pub const fn button'):]
     body = body[:body.index('\n    }\n')]
@@ -227,16 +227,16 @@ def main():
                          capture_output=True, text=True).stdout.strip()
     dirty = subprocess.run(['git', 'status', '--porcelain', '--', '.'], cwd=ROOT,
                            capture_output=True, text=True).stdout.strip()
-    version = sha + (' + незакоммиченные правки' if dirty else '')
+    version = sha + (' + uncommitted changes' if dirty else '')
 
     report = Path(tempfile.gettempdir()) / 'ksg_stand_pressed.txt'
     if report.exists():
         report.unlink()
-    unit_run, unit_raw = coverage('модульные и интеграционные', ['--', '--skip', 'e2e_', '--skip', 'smoke_'])
-    e2e_run, e2e_raw = coverage('e2e (стенд)', ['--test', 'e2e_stand'],
+    unit_run, unit_raw = coverage('unit and integration', ['--', '--skip', 'e2e_', '--skip', 'smoke_'])
+    e2e_run, e2e_raw = coverage('e2e (stand)', ['--test', 'e2e_stand'],
                                 {'KSG_STAND_REPORT': str(report)})
-    smoke_run, smoke_raw = coverage('смоук (стенд)', ['--test', 'smoke_stand'])
-    all_run, all_raw = coverage('все', [])
+    smoke_run, smoke_raw = coverage('smoke (stand)', ['--test', 'smoke_stand'])
+    all_run, all_raw = coverage('all', [])
 
     unit, e2e, smoke, every = (functions(x) for x in (unit_raw, e2e_raw, smoke_raw, all_raw))
     pressed = set(re.findall(r'"(\w+)"', report.read_text())) if report.exists() else set()
@@ -260,9 +260,9 @@ def main():
     if gn is not None:
         cov_short = {(r['file'], r['function'].split('::')[-1]) for r in rows}
         only_gn = sorted(k for k in gn if k not in cov_short)
-        gn_note = (f'GitNexus: {len(gn)} символов-функций в тех же файлах; '
-                   f'нет в покрытии: {len(only_gn)} (обычно `const fn`, подставленные '
-                   f'компилятором, и функции тестовых модулей `#[cfg(test)]`).')
+        gn_note = (f'GitNexus: {len(gn)} function symbols in the same files; '
+                   f'missing from coverage: {len(only_gn)} (usually `const fn` inlined '
+                   f'by the compiler, and test-module functions `#[cfg(test)]`).')
 
     ops_rows = [{'operation': op, 'button': b, 'e2e': op in pressed or op == 'PrintRelease'}
                 for op, b in ops.items()]
@@ -276,70 +276,70 @@ def main():
     OUT_JSON.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + '\n')
 
     L = []
-    L.append('# Реестр функций ПО внутри контейнера\n')
-    L.append('**Генерируется** `scripts/container_registry.py`. Руками не править.\n')
-    L.append(f'**Прогон:** {date} · **версия:** `{version}`\n')
-    L.append('«Выполнялась» — факт из покрытия (`cargo llvm-cov`): функция исполнялась '
-             'хотя бы раз в прогоне этого набора тестов. Число — счётчик исполнений.\n')
-    L.append('## 1. Прогоны\n')
-    L.append('| Набор | Итог | Пройдено | Упало |')
+    L.append('# Registry of software functions inside the container\n')
+    L.append('**Generated** by `scripts/container_registry.py`. Do not edit by hand.\n')
+    L.append(f'**Run:** {date} · **version:** `{version}`\n')
+    L.append('"Executed" is a coverage fact (`cargo llvm-cov`): the function ran '
+             'at least once in this test-set run. The number is the execution counter.\n')
+    L.append('## 1. Runs\n')
+    L.append('| Set | Result | Passed | Failed |')
     L.append('|---|---|---|---|')
     for r in runs:
-        L.append(f"| {r['label']} | {'зелёный' if r['ok'] else '**красный**'} | {r['passed']} | {r['failed']} |")
+        L.append(f"| {r['label']} | {'green' if r['ok'] else '**red**'} | {r['passed']} | {r['failed']} |")
     L.append('')
-    L.append('## 2. Операции кнопок на стенде (e2e)\n')
-    L.append('`PrintRelease` — запись 0 секции статуса, ложится при сборке, до кнопок.\n')
-    L.append('| Операция | Кнопка | Прошла через кнопку на стенде |')
+    L.append('## 2. Button operations on the stand (e2e)\n')
+    L.append('`PrintRelease` — record 0 of the status section, lands at build time, before the buttons.\n')
+    L.append('| Operation | Button | Went through the button on the stand |')
     L.append('|---|---|---|')
-    names = {'Issuer': 'D-1 эмитента', 'Signatures': 'D-2 подписей', 'Export': 'D-3 выгрузки'}
+    names = {'Issuer': 'D-1 of issuer', 'Signatures': 'D-2 of signatures', 'Export': 'D-3 of export'}
     for o in ops_rows:
-        L.append(f"| `{o['operation']}` | {names.get(o['button'], o['button'])} | {'да' if o['e2e'] else '**нет**'} |")
+        L.append(f"| `{o['operation']}` | {names.get(o['button'], o['button'])} | {'yes' if o['e2e'] else '**no**'} |")
     L.append('')
-    L.append(f'## 3. Функции — {len(rows)}; пропусков — {len(never)}, '
-             f'невызываемых по устройству — {len(bounded)}\n')
+    L.append(f'## 3. Functions — {len(rows)}; gaps — {len(never)}, '
+             f'unreachable by design — {len(bounded)}\n')
     if gn_note:
         L.append(gn_note + '\n')
-    L.append('«Кнопки» — функция в модуле, через который идёт нажатие (цикл §3.3).\n')
-    L.append('| № | Функция | Файл:строка | Кнопки | Модульные | e2e | Смоук |')
+    L.append('"Buttons" — a function in a module the press goes through (loop §3.3).\n')
+    L.append('| # | Function | File:line | Buttons | Unit | e2e | Smoke |')
     L.append('|---|---|---|---|---|---|---|')
     for i, r in enumerate(rows, 1):
         mark = lambda n: str(n) if n else '**0**'
         L.append(f"| {i} | `{r['function']}` | `{r['file']}:{r['line']}` | "
-                 f"{'да' if r['button_path'] else ''} | {mark(r['unit'])} | {r['e2e'] or 0} | {r['smoke'] or 0} |")
+                 f"{'yes' if r['button_path'] else ''} | {mark(r['unit'])} | {r['e2e'] or 0} | {r['smoke'] or 0} |")
     L.append('')
-    L.append('## 4. Ни разу не выполнялись — пропуски\n')
+    L.append('## 4. Never executed — gaps\n')
     if never:
         for r in never:
             L.append(f"- `{r['file']}:{r['line']}` `{r['function']}`")
     else:
-        L.append('Нет.')
+        L.append('None.')
     L.append('')
     if bounded:
-        L.append('## 5. Не вызываются тестом по устройству — границы\n')
+        L.append('## 5. Not triggered by tests by design — boundaries\n')
         for r in bounded:
             L.append(f"- `{r['file']}:{r['line']}` `{r['function']}` — "
                      f"{UNREACHABLE[(r['file'], r['function'])]}")
         L.append('')
-    L.append('## 6. Порядок работы воркера\n')
-    L.append('1. `python scripts/container_registry.py` — прогоны и этот файл.')
-    L.append('2. Раздел 4 не пуст — на каждую функцию тест, названный по тому, что он '
-             'удерживает; сценарный — на стенде (`tests/stand/`), точечный — в '
+    L.append('## 6. Worker procedure\n')
+    L.append('1. `python scripts/container_registry.py` — the runs and this file.')
+    L.append('2. Section 4 is not empty — one test per function, named after what it '
+             'holds; scenario ones — on the stand (`tests/stand/`), pinpoint ones — in '
              '`tests/registry_gaps.rs`.')
-    L.append('3. Раздел 2 содержит «нет» — сценарий стенда, доводящий операцию до кнопки.')
-    L.append('4. Функцию нельзя вызвать тестом — причина в `UNREACHABLE` скрипта, не молчание.')
-    L.append('5. Повторить п. 1, закоммитить реестр вместе с тестами.')
+    L.append('3. Section 2 contains "no" — a stand scenario bringing the operation to the button.')
+    L.append('4. A function cannot be triggered by a test — the reason goes into script `UNREACHABLE`, no silence.')
+    L.append('5. Repeat item 1, commit the registry together with the tests.')
     L.append('')
     OUT_MD.write_text('\n'.join(L))
 
-    print(f'{OUT_MD.relative_to(ROOT)}: функций {len(rows)}, не выполнялись {len(never)}, '
-          f'операций без e2e {len(ops_missing)}')
+    print(f'{OUT_MD.relative_to(ROOT)}: functions {len(rows)}, never executed {len(never)}, '
+          f'operations without e2e {len(ops_missing)}')
     for r in runs:
-        print(f"  {r['label']}: {'ok' if r['ok'] else 'FAILED'} {r['passed']} пройдено, {r['failed']} упало")
+        print(f"  {r['label']}: {'ok' if r['ok'] else 'FAILED'} {r['passed']} passed, {r['failed']} failed")
     if not all(r['ok'] for r in runs) or ops_missing or never:
         if never:
-            print('  пропуски:', ', '.join(f"{r['file']}:{r['line']}" for r in never), file=sys.stderr)
+            print('  gaps:', ', '.join(f"{r['file']}:{r['line']}" for r in never), file=sys.stderr)
         if ops_missing:
-            print('  операции без e2e:', ', '.join(ops_missing), file=sys.stderr)
+            print('  operations without e2e:', ', '.join(ops_missing), file=sys.stderr)
         sys.exit(1)
 
 
