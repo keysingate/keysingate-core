@@ -46,3 +46,8 @@ zeroize      = { version = "1", default-features = false, features = ["alloc", "
 # cli, store, journal) spend their time in dependencies.
 [profile.dev.package."*"]
 opt-level = 3
+
+# tiny_http 0.12.0 with a bounded body drain (third_party/tiny_http-0.12.0/
+# KEYSINGATE_PATCH.md): upstream aborts the process on a huge Content-Length.
+[patch.crates-io]
+tiny_http = { path = "third_party/tiny_http-0.12.0" }

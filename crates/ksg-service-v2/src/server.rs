@@ -61,9 +61,9 @@
 //! an operator needs.
 
 use std::collections::{BTreeMap, HashMap};
-use std::io::{Read as _, Write as _};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -93,6 +93,12 @@ use crate::registry::{ChainRegistry, DEFAULT_MAX_AGE_MS};
 
 /// The largest body taken: 2 MiB — a status section of 1 024 records fits.
 pub const MAX_BODY: usize = 2 * 1024 * 1024;
+/// A single read or write on a client socket waits at most this long; a
+/// silent client is dropped instead of holding a request thread.
+pub const SOCKET_TIMEOUT_S: u64 = 5;
+/// The whole body must arrive within this time, however it trickles in.
+pub const BODY_DEADLINE_S: u64 = 10;
+
 /// How long a landed job's answer is kept for its holder: thirty days.
 pub const DONE_KEEP_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 /// The most landed answers kept per holder.
@@ -187,6 +193,61 @@ pub struct Shared {
     bare: Mutex<BareLedger>,
     /// Pending orchestrator challenges (этап 9: in-memory, ten minutes each).
     orch: Mutex<OrchLedger>,
+    /// Request threads now inside an outgoing call (`did.json`, RPC).
+    outbound: AtomicUsize,
+    /// The most request threads allowed in outgoing calls at once: the rest
+    /// stay free for anchoring and status, whatever a remote host does.
+    outbound_max: usize,
+}
+
+/// One request thread's place in an outgoing call; freed on drop.
+struct OutboundSlot<'a>(&'a AtomicUsize);
+
+impl Drop for OutboundSlot<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// The share of request threads that may wait on remote hosts: half,
+/// at least one.
+fn outbound_max(workers: usize) -> usize {
+    (workers / 2).max(1)
+}
+
+/// Reads a body of at most `MAX_BODY` bytes that must end by `deadline`.
+/// Each read is itself bounded by the socket timeout, so a client sending
+/// nothing, or a byte at a time, cannot keep the thread past the deadline.
+fn read_body(r: &mut dyn std::io::Read, deadline: Instant) -> Result<Vec<u8>, Reply> {
+    let mut body = Vec::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        if Instant::now() > deadline {
+            return Err(err(408, "the body came too slowly"));
+        }
+        match r.read(&mut buf) {
+            Ok(0) => return Ok(body),
+            Ok(n) => {
+                let Some(got) = buf.get(..n) else {
+                    return Err(err(400, "the body did not read"));
+                };
+                if body.len() + got.len() > MAX_BODY {
+                    return Err(err(413, "the body is too large"));
+                }
+                body.extend_from_slice(got);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                return Err(err(408, "the body came too slowly"));
+            }
+            Err(_) => return Err(err(400, "the body did not read")),
+        }
+    }
 }
 
 /// A running service.
@@ -737,21 +798,24 @@ impl Shared {
         Ok(id)
     }
 
+    /// A place for an outgoing call, or 503 when half the request threads
+    /// already wait on remote hosts.
+    fn outbound_slot(&self) -> Result<OutboundSlot<'_>, Reply> {
+        if self.outbound.fetch_add(1, Ordering::SeqCst) >= self.outbound_max {
+            self.outbound.fetch_sub(1, Ordering::SeqCst);
+            return Err(err(503, "busy: too many outgoing calls; try again later"));
+        }
+        Ok(OutboundSlot(&self.outbound))
+    }
+
     fn handle(&self, rq: &mut tiny_http::Request) -> Reply {
         let method = rq.method().as_str().to_owned();
         let path = rq.url().split('?').next().unwrap_or("").to_owned();
-        let mut body = Vec::new();
-        if rq
-            .as_reader()
-            .take(MAX_BODY as u64 + 1)
-            .read_to_end(&mut body)
-            .is_err()
-        {
-            return err(400, "the body did not read");
-        }
-        if body.len() > MAX_BODY {
-            return err(413, "the body is too large");
-        }
+        let deadline = Instant::now() + Duration::from_secs(BODY_DEADLINE_S);
+        let body = match read_body(rq.as_reader(), deadline) {
+            Ok(b) => b,
+            Err(r) => return r,
+        };
         let now = now_ms();
         match (method.as_str(), path.as_str()) {
             ("GET", "/v1/health") => self.health(),
@@ -837,6 +901,10 @@ impl Shared {
         };
         // The status records' anchors are read from the network the service
         // anchors on.
+        let _slot = match self.outbound_slot() {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
         let reader = match SolanaReader::connect(self.rpc.as_ref(), &self.cfg.cluster) {
             Ok(r) => r,
             Err(e) => return err(503, format!("the network: {e}")),
@@ -1165,7 +1233,7 @@ impl Shared {
         if domain.to_lowercase() != worker {
             return err(403, "worker: not this domain");
         }
-        let key = match orch_key(&did_web) {
+        let key = match self.outbound_slot().and_then(|_slot| orch_key(&did_web)) {
             Ok(k) => k,
             Err(e) => return e,
         };
@@ -1659,6 +1727,8 @@ impl Shared {
             legal: Vec::new(),
             bare: Mutex::new(BareLedger::new()),
             orch: Mutex::new(OrchLedger::new()),
+            outbound: AtomicUsize::new(0),
+            outbound_max: outbound_max(1),
         })
     }
 
@@ -1804,8 +1874,12 @@ pub fn start(
         read_json(&cfg.state.join("registry.json"))?.unwrap_or_default();
     registry.configure(issuer, max_age);
 
-    let http =
-        Arc::new(tiny_http::Server::http(&cfg.listen).map_err(|e| format!("{}: {e}", cfg.listen))?);
+    // Every accepted connection gets the socket timeout (patched tiny_http,
+    // third_party/tiny_http-0.12.0): a silent peer frees its thread.
+    let http = Arc::new(
+        tiny_http::Server::http_with_timeout(&cfg.listen, Duration::from_secs(SOCKET_TIMEOUT_S))
+            .map_err(|e| format!("{}: {e}", cfg.listen))?,
+    );
     let addr = http
         .server_addr()
         .to_ip()
@@ -1821,6 +1895,8 @@ pub fn start(
         rpc,
         bare: Mutex::new(BareLedger::new()),
         orch: Mutex::new(OrchLedger::new()),
+        outbound: AtomicUsize::new(0),
+        outbound_max: outbound_max(workers),
     });
     let stop = Arc::new(AtomicBool::new(false));
     let mut threads = Vec::new();
@@ -1871,4 +1947,37 @@ pub fn start(
         stop,
         threads,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::*;
+
+    #[test]
+    fn outbound_calls_take_at_most_half_the_threads() {
+        assert_eq!(outbound_max(1), 1);
+        assert_eq!(outbound_max(4), 2);
+        let s = Shared::bare_only("https://svc.example/v1").unwrap();
+        let Ok(first) = s.outbound_slot() else {
+            panic!("the first call gets a place")
+        };
+        let second = s.outbound_slot();
+        assert_eq!(second.err().map(|r| r.status()), Some(503));
+        drop(first);
+        assert!(s.outbound_slot().is_ok(), "the place is back after drop");
+    }
+
+    #[test]
+    fn a_body_past_the_deadline_is_408() {
+        let past = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
+        let r = read_body(&mut std::io::repeat(b'a'), past).err().unwrap();
+        assert_eq!(r.status(), 408);
+        let r = read_body(&mut std::io::repeat(b'a'), Instant::now() + Duration::from_secs(60))
+            .err()
+            .unwrap();
+        assert_eq!(r.status(), 413);
+        let ok = read_body(&mut &b"{}"[..], Instant::now() + Duration::from_secs(60)).unwrap();
+        assert_eq!(ok, b"{}");
+    }
 }
