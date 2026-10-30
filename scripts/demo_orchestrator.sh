@@ -261,7 +261,10 @@ while [ "$STEP" -le "$LAST_STEP" ]; do
   if [ "$STEP" -eq 6 ]; then
     # The export range comes from the orchestrator, not from the agent's memory.
     LAST_PAGE=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(max(d.values()) if d else 0)' "$STEPS_JSON")
-    PAGE_LIST=$(python3 -c 'import json,sys; print(", ".join(str(v) for v in sorted(set(json.load(open(sys.argv[1])).values()))))' "$STEPS_JSON")
+    # Every page from the first recorded to the last — a step may write more
+    # than the one it reports (step 3: the Muse Spark call's own page, then
+    # the quote), and the judge must see the model call too.
+    PAGE_LIST=$(python3 -c 'import json,sys; v=json.load(open(sys.argv[1])).values(); print(", ".join(str(p) for p in range(min(v), max(v)+1)) if v else "")' "$STEPS_JSON")
     echo "Pages: $PAGE_LIST." >>"$PROMPT_FILE"
   fi
   # Every page step must show in the journal (1.6a): said so to the agent too.
