@@ -1463,3 +1463,65 @@ fn transfers_to_new_owners_hand_the_writer_over_each_time() {
         assert_eq!(chain_head(&node, &home).writer, evm_address(byte), "{n}");
     }
 }
+
+/// Sent, landed, the confirmation never seen (a timeout, the node gone half-way):
+/// the anchor is this file's own. The next opening finds it at the head and
+/// takes it as `last` — the file is not a copy, and goes on anchoring.
+#[test]
+fn an_anchor_landed_unconfirmed_is_settled_at_the_next_opening() {
+    let d = Dir::new("unconfirmed-open");
+    let node = MockBase::start();
+    let (home, half) = (d.p("home"), d.p("m.half"));
+    light(&d, &node, &home, &half);
+    ok(&["--home", &home, "--mobile", &half, "work", "--did", "one"]);
+    let before = count(&node, &home);
+
+    node.chain.lock().unwrap().lose_confirmations = true;
+    let e = fails(&[
+        "--home", &home, "--mobile", &half, "export-page", "--number", "1", "--by", "owner",
+        "--out", &d.p("p.json"),
+    ]);
+    assert!(e.contains("did not take it"), "{e}");
+    // It landed all the same; the file only knows it was sent.
+    assert_eq!(count(&node, &home), before + 1);
+    assert_eq!(base_cfg(&home)["pending"].as_array().map(Vec::len), Some(1));
+    let head = ksg_anchor_v2::evm::hex0x(&chain_head(&node, &home).last);
+    assert_ne!(base_cfg(&home)["last"].as_str(), Some(head.as_str()));
+
+    node.chain.lock().unwrap().lose_confirmations = false;
+    ok(&["--home", &home, "--mobile", &half, "work", "--did", "two"]);
+    assert_eq!(base_cfg(&home)["last"].as_str(), Some(head.as_str()));
+    assert!(base_cfg(&home)["pending"].is_null());
+    export(&home, &half, "owner", &d.p("p.json"));
+    assert_eq!(count(&node, &home), before + 2);
+}
+
+/// The same, when the opening could not read the head: the anchor that is
+/// due reads it first and settles the lost one before it continues it.
+#[test]
+fn an_anchor_landed_unconfirmed_is_settled_before_the_next_anchor() {
+    let d = Dir::new("unconfirmed-anchor");
+    let node = MockBase::start();
+    let (home, half) = (d.p("home"), d.p("m.half"));
+    light(&d, &node, &home, &half);
+    ok(&["--home", &home, "--mobile", &half, "work", "--did", "one"]);
+    let before = count(&node, &home);
+
+    node.chain.lock().unwrap().lose_confirmations = true;
+    fails(&[
+        "--home", &home, "--mobile", &half, "export-page", "--number", "1", "--by", "owner",
+        "--out", &d.p("p.json"),
+    ]);
+    assert_eq!(count(&node, &home), before + 1);
+    {
+        let mut c = node.chain.lock().unwrap();
+        c.lose_confirmations = false;
+        // The check at opening is cut once; the anchor's own read is not.
+        c.drop = Some(ksg_verify_v2::base::HEAD_SELECTOR);
+        c.drop_left = Some(1);
+    }
+    ok(&["--home", &home, "--mobile", &half, "work", "--did", "two"]);
+    export(&home, &half, "owner", &d.p("p2.json"));
+    assert!(base_cfg(&home)["pending"].is_null());
+    assert_eq!(count(&node, &home), before + 2);
+}

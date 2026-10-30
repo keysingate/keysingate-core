@@ -1174,6 +1174,7 @@ fn issue_anchor_command(args: &[String]) -> Result<(), Failure> {
                     last: None,
                     since: 0,
                     last_tx: None,
+                    pending: Vec::new(),
                     share: None,
                     salt: None,
                     hand_to: None,
@@ -1379,6 +1380,7 @@ fn lost_command(cmd: &str, args: &[String]) -> Result<(), Failure> {
         last: None,
         since: 0,
         last_tx: None,
+        pending: Vec::new(),
         share: None,
         salt: None,
         hand_to: None,
@@ -1447,6 +1449,7 @@ fn base_flags(
             last: None,
             since: 0,
             last_tx: None,
+            pending: Vec::new(),
             share: None,
             // The blind anchor key's salt (owner's decision 15.10 "B", the blind key).
             salt: Some(ksg_anchor_v2::evm::hex0x(&{

@@ -87,6 +87,13 @@ pub struct BaseCfg {
     /// Records written since the last anchor.
     #[serde(default)]
     pub since: u32,
+    /// Anchors this file sent and did not see land, hex: the transaction
+    /// went out, its confirmation did not come (a timeout, a node that
+    /// stopped answering). Written before sending. If one of them turns out to be
+    /// the chain's head, it was this file's own and becomes `last` — not a
+    /// sign of a copy ([`BaseCfg::settle`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending: Vec<String>,
     /// The transaction of the last anchor, for the record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_tx: Option<String>,
@@ -166,6 +173,33 @@ impl BaseCfg {
         .try_into()
         .map_err(|_| "container.json: base.salt is not 32 bytes".to_owned())?;
         Ok(ksg_verify_v2::base::anchor_key(&word(template), &salt))
+    }
+}
+
+impl BaseCfg {
+    /// Takes the chain's head into account: when it is an anchor this file
+    /// sent and did not see land ([`BaseCfg::pending`]), the anchor landed
+    /// after all and becomes `last`. Returns whether anything changed.
+    ///
+    /// Every pending anchor continues `last`, so once one of them is the
+    /// head none of the others can land any more: all are dropped.
+    pub fn settle(&mut self, head: &[u8; 32]) -> bool {
+        let h = hex0x(head);
+        if self.pending.iter().any(|p| p.eq_ignore_ascii_case(&h)) {
+            self.last = Some(h);
+            self.last_tx = None;
+            self.pending.clear();
+            return true;
+        }
+        false
+    }
+
+    /// Notes `next` as sent and not seen land — written before it is sent.
+    pub fn sending(&mut self, next: &[u8; 32]) {
+        let h = hex0x(next);
+        if !self.pending.iter().any(|p| p.eq_ignore_ascii_case(&h)) {
+            self.pending.push(h);
+        }
     }
 }
 
@@ -332,6 +366,15 @@ impl BaseLink {
     ) -> Result<Standing, String> {
         let h = head(self.rpc.as_ref(), &self.contract, container)?;
         Ok(check_not_stale(&h, mine))
+    }
+
+    /// The container's head on the chain.
+    ///
+    /// # Errors
+    ///
+    /// The network does not answer.
+    pub fn head(&self, container: &[u8; 32]) -> Result<ksg_verify_v2::base::Head, String> {
+        head(self.rpc.as_ref(), &self.contract, container)
     }
 
     fn send(&self, data: Vec<u8>) -> Result<String, AnchorError> {

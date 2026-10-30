@@ -783,6 +783,7 @@ impl LabelNet {
             last: None,
             since: 0,
             last_tx: None,
+            pending: Vec::new(),
             share: None,
             salt: None,
             hand_to: None,
@@ -1043,7 +1044,7 @@ impl Reader {
     pub fn open(home: &Path, mobile: Box<dyn Mobile>) -> Result<Self, String> {
         let home = Home(home.to_path_buf());
         let lock = Lock::take(&home)?;
-        let meta: Meta = serde_json::from_slice(&read(&home.meta())?)
+        let mut meta: Meta = serde_json::from_slice(&read(&home.meta())?)
             .map_err(|x| format!("container.json: {x}"))?;
         let raw = Zeroizing::new(read(&home.layer_key())?);
         let key: [u8; 32] = raw
@@ -1092,13 +1093,15 @@ impl Reader {
         // answers. A node that does not answer is the ten offline records'
         // business, not a refusal here.
         let mut copy = false;
-        let base = match &meta.base {
+        // An anchor this file sent and did not see land may be the head now:
+        // then it is this file's own, not another copy's (settled below).
+        let mut settled = false;
+        let base = match meta.base.clone() {
             // `light` anchors here; Pro reads only E-19 here (16.10 "A").
-            Some(cfg) if matches!(meta.class, Class::Light | Class::Heavy) => {
-                match connect_base(cfg) {
+            Some(mut cfg) if matches!(meta.class, Class::Light | Class::Heavy) => {
+                match connect_base(&cfg) {
                     Ok(link) => {
                         let t = cfg.anchor_key(&c.template_id())?;
-                        let mine = cfg.last_bytes()?;
                         let kind = |tag: &str| ksg_anchor_v2::evm::note_kind(tag);
                         let read = ksg_verify_v2::base::loss(
                             link.rpc(),
@@ -1107,7 +1110,15 @@ impl Reader {
                             &kind,
                             cfg.from_block.unwrap_or(0),
                         )
-                        .and_then(|l| Ok((l, link.standing(&t, mine.as_ref())?)));
+                        .and_then(|l| Ok((l, link.head(&t)?)))
+                        .and_then(|(l, h)| {
+                            if cfg.settle(&h.last) {
+                                settled = true;
+                                meta.base = Some(cfg.clone());
+                            }
+                            let mine = cfg.last_bytes()?;
+                            Ok((l, ksg_verify_v2::base::check_not_stale(&h, mine.as_ref())))
+                        });
                         match read {
                             // E-19: a container its client's half declared lost
                             // is not opened (status 9).
@@ -1135,6 +1146,14 @@ impl Reader {
             }
             _ => None,
         };
+        // Only the record of what landed changes: the container is untouched.
+        if settled {
+            write_atomic(
+                &home.meta(),
+                &serde_json::to_vec_pretty(&meta).map_err(e)?,
+                false,
+            )?;
+        }
         Ok(Self {
             home,
             key,
@@ -1820,22 +1839,33 @@ impl Reader {
                     format!("an anchor is due and Base Sepolia does not answer: {x}")
                 })?);
         }
-        let link = self.base.as_ref().ok_or("no link")?;
+        let key = cfg.anchor_key(&self.c.template_id())?;
         let next = word(
             &self
                 .c
                 .top_seal_hash()
                 .unwrap_or_else(|| self.c.status_head()),
         );
+        // An anchor sent earlier whose confirmation never came may have landed
+        // since: then it is `last`, and the new one continues it.
+        self.base_settle(&key)?;
+        let cfg = self.meta.base.clone().ok_or("no base")?;
         let prev = cfg.last_bytes()?.unwrap_or([0; 32]);
         if cfg.last_bytes()? == Some(next) {
             return Ok(());
         }
-        let key = cfg.anchor_key(&self.c.template_id())?;
+        // Written before sending: if the confirmation does not come, the file
+        // still knows the head may be its own.
+        if let Some(b) = &mut self.meta.base {
+            b.sending(&next);
+        }
+        self.save()?;
+        let link = self.base.as_ref().ok_or("no link")?;
         match link.anchor(&key, &prev, &next) {
             Ok(tx) => {
                 if let Some(b) = &mut self.meta.base {
                     b.last = Some(ksg_anchor_v2::evm::hex0x(&next));
+                    b.pending.clear();
                     b.since = 0;
                     b.last_tx = Some(tx);
                     if first_block.is_some() {
@@ -1848,6 +1878,11 @@ impl Reader {
             }
             Err(AnchorError::Refused(r)) => {
                 if matches!(r, ksg_anchor_v2::evm::Refusal::StalePredecessor { .. }) {
+                    // The head moved past `last`: one of this file's own
+                    // unconfirmed anchors landed meanwhile, or this is a copy.
+                    if self.base_settle(&key)? {
+                        return self.base_anchor();
+                    }
                     self.copy = true;
                 }
                 Err(format!(
@@ -1859,6 +1894,33 @@ impl Reader {
                 "an anchor is due and Base Sepolia did not take it: {x}"
             )),
         }
+    }
+
+    /// Reads the head and, when it is one of this file's own anchors sent
+    /// without a confirmation, records it as `last` ([`BaseCfg::settle`]).
+    /// Returns whether it did.
+    ///
+    /// # Errors
+    ///
+    /// The node does not answer, or the file does not save.
+    fn base_settle(&mut self, key: &[u8; 32]) -> Result<bool, String> {
+        let pending = self
+            .meta
+            .base
+            .as_ref()
+            .is_some_and(|b| !b.pending.is_empty());
+        if !pending {
+            return Ok(false);
+        }
+        let link = self.base.as_ref().ok_or("no link")?;
+        let h = link
+            .head(key)
+            .map_err(|x| format!("an anchor is due and Base Sepolia does not answer: {x}"))?;
+        let changed = self.meta.base.as_mut().is_some_and(|b| b.settle(&h.last));
+        if changed {
+            self.save()?;
+        }
+        Ok(changed)
     }
 
     /// KS-8 C-10, step 1 (E-18, `[decision]` 10.09): the agent publishes its

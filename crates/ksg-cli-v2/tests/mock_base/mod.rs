@@ -55,6 +55,10 @@ pub struct Chain {
     /// How many such calls are dropped before the network is back; none —
     /// every one.
     pub drop_left: Option<u32>,
+    /// Confirmations are not given (the node errs on
+    /// `eth_getTransactionReceipt`), while transactions still land: a sender
+    /// sees its transaction go and never sees it land.
+    pub lose_confirmations: bool,
     /// Smart accounts the factory named, and their owners.
     pub accounts: BTreeMap<[u8; 20], [u8; 20]>,
     /// Smart accounts with code: created by their first UserOperation.
@@ -192,6 +196,7 @@ impl Chain {
             down: false,
             drop: None,
             drop_left: None,
+            lose_confirmations: false,
             accounts: BTreeMap::new(),
             deployed: BTreeSet::new(),
             op_nonces: BTreeMap::new(),
@@ -515,6 +520,9 @@ impl Chain {
             "eth_sendRawTransaction" => {
                 let raw = unhex(p[0].as_str().unwrap_or("")).map_err(|e| e.to_string())?;
                 Ok(json!(h(&self.send_raw(&raw)?)))
+            }
+            "eth_getTransactionReceipt" if self.lose_confirmations => {
+                Err("the network is down".into())
             }
             "eth_getTransactionReceipt" => {
                 let want = unhex(p[0].as_str().unwrap_or("")).map_err(|e| e.to_string())?;
