@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One live x402 payment on Base Sepolia (G2-8, [р] 11.10): μ Gate pays the
+# One live x402 payment on Base Sepolia (G2-8, [decision] 11.10): μ Gate pays the
 # issuer's 402 answer with the payer's own key, the issuer's till accepts the
 # header, the facilitator settles it on chain. Test USDC only.
 #

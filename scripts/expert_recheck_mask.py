@@ -8,7 +8,7 @@ checks the picture is the one the page names, asks SAM 3.1 the same question
 
   scripts/expert_recheck_mask.py --page page-5.json --image demo/damage_4417.png
 
-Prints `✓ совпало` (exit 0) or `✗ расходится` (exit 1). Only the picture of the
+Prints `✓ match` (exit 0) or `✗ mismatch` (exit 1). Only the picture of the
 demo leaves the machine: synthetic, generated for the demo (API Terms § 6.2).
 """
 import argparse
@@ -19,8 +19,8 @@ from pathlib import Path
 import ksg_model_api as api
 import ksg_pages as pages
 
-MATCH = "✓ совпало"
-MISMATCH = "✗ расходится"
+MATCH = "✓ match"
+MISMATCH = "✗ mismatch"
 
 
 def recheck(page_file, image_file, model=None) -> dict:

@@ -237,7 +237,7 @@ class ExpertRecheckTest(unittest.TestCase):
         result = expert_recheck_mask.recheck(self.page, self.image)
 
         self.assertTrue(result["matched"])
-        self.assertEqual(result["verdict"], "✓ совпало")
+        self.assertEqual(result["verdict"], "✓ match")
         self.assertEqual(result["mask_sha256"], api.sha256_hex("1,1,AAECAw"))
         self.assertEqual(transport.calls[0]["body"]["input"][0]["content"][0]["text"],
                          "<0f>1<|box;x1=0;y1=0;x2=1;y2=1;w=1;h=1|>")
@@ -249,7 +249,7 @@ class ExpertRecheckTest(unittest.TestCase):
         result = expert_recheck_mask.recheck(self.page, self.image)
 
         self.assertFalse(result["matched"])
-        self.assertEqual(result["verdict"], "✗ расходится")
+        self.assertEqual(result["verdict"], "✗ mismatch")
 
     def test_another_picture_is_a_mismatch_without_a_call(self):
         self.write_page(image_sha="0" * 64)
