@@ -166,8 +166,23 @@ journal_pages() {
   [ -s "$WORK/.current" ] || { echo 0; return; }
   name=$(cat "$WORK/.current")
   [ -f "$WORK/$name/h/container.json" ] || { echo 0; return; }
-  out=$("$KSG_PANEL" --home "$WORK/$name/h" status 2>/dev/null || true)
+  out=$("$KSG_PANEL" --home "$WORK/$name/h" status 2>&1) || {
+    echo "journal_pages: $KSG_PANEL status failed: $(echo "$out" | tail -1)" >&2; echo 0; return; }
   echo "$out" | awk '$1 == "pages" && NF == 2 { print $2; found = 1 } END { if (!found) print 0 }'
+}
+# journal_where: why the journal reads as it does — for the stop message, so a
+# failed check names the cause (no .current in this KSG_WORK, no container, a
+# panel that does not run) instead of blaming the agent.
+journal_where() {
+  if [ ! -s "$WORK/.current" ]; then
+    echo "no $WORK/.current (the agent's ksg MCP writes to another KSG_WORK?)"
+  elif [ ! -f "$WORK/$(cat "$WORK/.current")/h/container.json" ]; then
+    echo "$WORK/.current names $(cat "$WORK/.current"), no container there"
+  elif [ ! -x "$KSG_PANEL" ]; then
+    echo "panel $KSG_PANEL is not executable"
+  else
+    echo "container $WORK/$(cat "$WORK/.current")"
+  fi
 }
 # step_written <step> <page> <pages before the step>: the page steps (1-5) must
 # have added a page to the journal during this step, and the claimed page must
@@ -182,7 +197,7 @@ step_written() {
         echo "no page=<n> in the STEP line"; return 1
       fi
       if [ "$after" -le "$before" ]; then
-        echo "the journal did not grow (pages $before -> $after): no tool call wrote a page"; return 1
+        echo "the journal did not grow (pages $before -> $after; $(journal_where)): no tool call wrote a page there"; return 1
       fi
       if [ "$page" -lt "$before" ] || [ "$page" -ge "$after" ]; then
         echo "page=$page is not one written in this step (new pages $before..$((after - 1)))"; return 1
