@@ -395,7 +395,7 @@ impl ContainerKeygen {
 
     /// Names the key being born — [`MobileHalf::set_kid`], on this side: a
     /// hand-off keeps the name the owner gives, a birth gives the `did:key` of
-    /// the group key (Г-1), known only once both rounds are done.
+    /// the group key (G-1), known only once both rounds are done.
     pub fn set_kid(&mut self, kid: Uri) {
         self.kid = kid;
     }
@@ -887,7 +887,7 @@ impl MobileHalf {
     }
 
     /// Names the key. A key born at initiation is called by the `did:key` of
-    /// the group key it is half of (Г-1), and that key exists only at the end
+    /// the group key it is half of (G-1), and that key exists only at the end
     /// of the birth — so the name is given then, before the first signature
     /// under it, and both halves are given the same one.
     ///

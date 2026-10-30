@@ -1,5 +1,5 @@
 //! The capsule's criteria K1 and K2 (plan v8, `[doc:HACKATHON-PLAN]`;
-//! `[doc:CAPSULE-SPEC]` §3, §10 п. 2). Green 26.10; the noise
+//! `[doc:CAPSULE-SPEC]` §3, §10 item 2). Green 26.10; the noise
 //! test runs in release (`-- --ignored`).
 
 use ksg_container_v2::capsule::{

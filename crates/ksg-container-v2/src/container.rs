@@ -671,7 +671,7 @@ impl Container {
     }
 
     /// Lays the issuer's seal and the container's post-quantum key at
-    /// **initiation**, not at printing (Д-4, [doc:CAPSULE-SPEC] §9): the copies
+    /// **initiation**, not at printing (D-4, [doc:CAPSULE-SPEC] §9): the copies
     /// the sale chain keeps from before initiation then carry neither secret.
     ///
     /// Refused (`false`, nothing changes) on a container initiated already,
@@ -939,7 +939,7 @@ impl Container {
     }
 
     /// Names the key being born, once the group key is known: at initiation
-    /// the client's identifier is the `did:key` of that key (Г-1), and the
+    /// the client's identifier is the `did:key` of that key (G-1), and the
     /// group key exists only when both rounds of the birth are done. Nothing
     /// has been signed under the key yet, so the name is not a change of a
     /// claim, it is the claim.

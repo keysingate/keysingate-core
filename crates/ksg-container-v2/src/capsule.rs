@@ -1,5 +1,5 @@
 //! The capsule: the sealed form of a container. `[doc:CAPSULE-SPEC]`
-//! §3, §10 п. 2, §11 (owner's decisions 25.10: "a file of noise, the layout
+//! §3, §10 item 2, §11 (owner's decisions 25.10: "a file of noise, the layout
 //! known only to the map"; variant B — a client's map and an owner's map; one
 //! secret file per party).
 //!
@@ -35,7 +35,7 @@ pub const BLOCKS: usize = 1536;
 /// A capsule's size, bytes — the same for every capsule.
 pub const CAPSULE_SIZE: usize = BLOCK * BLOCKS;
 
-/// What a part of the capsule holds (`Spec_kapsula` §3, §10 п. 1).
+/// What a part of the capsule holds (`Spec_kapsula` §3, §10 item 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PartKind {
     /// The container's code (the WASM module).
@@ -122,7 +122,7 @@ pub const MAX_MAPS: usize = 3;
 /// The `SharedSecrets` part: what both maps must read to carry the capsule on.
 ///
 /// Public because the reader seals the first capsule (`init`) before any
-/// session opens it, and the module reads it back (`Spec_kapsula` §10 п. 3).
+/// session opens it, and the module reads it back (`Spec_kapsula` §10 item 3).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Shared {
     /// Version of this layout.
@@ -141,7 +141,7 @@ pub struct Shared {
     /// The greatest offset already used: offsets grow strictly, even when the
     /// wall clock does not.
     pub clock_ms: u64,
-    /// Every map the capsule seals to, in slot order (§10 п. 2).
+    /// Every map the capsule seals to, in slot order (§10 item 2).
     pub maps: Vec<MapPub>,
 }
 
@@ -160,7 +160,7 @@ pub struct MapPub {
 /// code, the state, and the parts the map does not rewrite.
 ///
 /// This is the one place a capsule is built — the reader's `init` (no session
-/// yet), and a session's close (`Spec_kapsula` §10 п. 3, §4).
+/// yet), and a session's close (`Spec_kapsula` §10 item 3, §4).
 ///
 /// # Errors
 ///
@@ -282,7 +282,7 @@ fn hkdf(ikm: &[u8], info: &[u8], out: &mut [u8]) {
 }
 
 /// The block a map's slot starts from: derived from the map's public half
-/// (`Spec_kapsula` §10 п. 2.2). A collision with an earlier map moves on.
+/// (`Spec_kapsula` §10 item 2.2). A collision with an earlier map moves on.
 #[must_use]
 pub fn slot_start(map: &SealTo) -> usize {
     let mut ikm = Vec::with_capacity(32 + crate::layers::MLKEM_EK_LEN);

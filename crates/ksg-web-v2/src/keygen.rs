@@ -8,7 +8,7 @@
 //! returns becomes the [`Web`][super::Web] the page signs the rounds with,
 //! through [`Web::from_waiting`][super::Web::from_waiting], while the reader
 //! drives the module's `FinishBirth`; the holder stores the half once the
-//! container is born (the stored copy is track И17).
+//! container is born (the stored copy is track I17).
 
 use ksg_core_v2::doc::Uri;
 use ksg_mobile_v2::Keygen;

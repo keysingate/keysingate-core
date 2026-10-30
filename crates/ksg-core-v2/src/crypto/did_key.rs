@@ -1,4 +1,4 @@
-//! `did:key` — an identifier computed from a public key. **Г-1.**
+//! `did:key` — an identifier computed from a public key. **G-1.**
 //!
 //! # Why a computed identifier
 //!
