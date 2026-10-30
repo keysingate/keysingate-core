@@ -92,7 +92,8 @@ with the ksg tools, at the moment you take it:
    one); keep the returned name (it is the `name` argument below).
 2. ksg_write_page: "input: ..." — the claim as you read it (the case is
    appended below).
-Reply with exactly one line: `STEP 1 OK page=<p>` where <p> is the page number
+Call the tools first; write nothing until they have returned. The last line
+of your reply is exactly `STEP 1 OK page=<p>` where <p> is the page number
 the tool gave you. The case (synthetic data):
 STEP
       ;;
@@ -101,7 +102,8 @@ New task. You are an insurance claims agent. Record this step as a journal page:
 1. Call ksg_get_container once (returns the existing container); keep `name`.
 2. ksg_write_page: "tool call: policy_lookup(P-88) -> ..." — the clauses you
    rely on for the claim (water damage, apartment 4417, policy P-88).
-Reply with exactly one line: `STEP 2 OK page=<p>`.
+Call the tools first; write nothing until they have returned. The last line
+of your reply is exactly `STEP 2 OK page=<p>`.
 STEP
       ;;
     3) cat <<'STEP'
@@ -112,7 +114,8 @@ New task. You are an insurance claims agent:
    clause; the tool journals the call itself (model, sha256 of the request,
    sha256 of the answer, the arguments, the time) and tells you the page
    number. Quote its answer in the next page (ksg_write_page).
-Reply with exactly one line: `STEP 3 OK page=<p>` where <p> is the quote page.
+Call the tools first; write nothing until they have returned. The last line
+of your reply is exactly `STEP 3 OK page=<p>` where <p> is the quote page.
 STEP
       ;;
     4) cat <<'STEP'
@@ -122,7 +125,8 @@ New task. You are an insurance claims agent:
    box=[600, 380, 1120, 1080]) — one damage picture; the tool journals the
    model, sha256 of the picture, the box and sha256 of the mask, and tells you
    the page number.
-Reply with exactly one line: `STEP 4 OK page=<p>`.
+Call the tools first; write nothing until they have returned. The last line
+of your reply is exactly `STEP 4 OK page=<p>`.
 STEP
       ;;
     5) cat <<'STEP'
@@ -130,7 +134,8 @@ New task. You are an insurance claims agent:
 1. Call ksg_get_container once (returns the existing container); keep `name`.
 2. ksg_write_page: "result: ..." — the decision, the reason and the clause
    (claim: water damage, apartment 4417, policy P-88).
-Reply with exactly one line: `STEP 5 OK page=<p>`.
+Call the tools first; write nothing until they have returned. The last line
+of your reply is exactly `STEP 5 OK page=<p>`.
 STEP
       ;;
     6) cat <<'STEP'
@@ -138,7 +143,8 @@ New task. You are an insurance claims agent:
 1. Call ksg_get_container once (returns the existing container); keep `name`.
 2. ksg_export_page for every page you wrote (1 through the last number the
    tools gave you), then ksg_verify each file.
-Reply with exactly one line: `STEP 6 OK page=<p>` where <p> is the last page
+Call the tools first; write nothing until they have returned. The last line
+of your reply is exactly `STEP 6 OK page=<p>` where <p> is the last page
 you exported and verified ACCEPTED.
 STEP
       ;;
@@ -276,9 +282,10 @@ while [ "$STEP" -le "$LAST_STEP" ]; do
   fi
   # Every page step must show in the journal (1.6a): said so to the agent too.
   cat >>"$PROMPT_FILE" <<'NOTE'
-The page number must be the one a ksg tool returned in THIS step. The
-orchestrator reads the container's journal after your reply: a STEP line
-without the tool call behind it is a failed step.
+This step is done only by calling the ksg tools named above — a reply with
+no tool call does nothing. The page number must be the one a ksg tool
+returned in THIS step. The orchestrator reads the container's journal after
+your reply: a STEP line without the tool call behind it is a failed step.
 NOTE
   BEFORE_PAGES=$(journal_pages)
   ATTEMPT=0
