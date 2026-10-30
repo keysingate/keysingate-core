@@ -1,7 +1,7 @@
-//! Criterion K3 (plan v8): Д-4 — before initiation the container holds neither
+//! Criterion K3 (plan v8): D-4 — before initiation the container holds neither
 //! the issuer's seal seed nor its post-quantum key, so the copies the sale
 //! chain keeps carry no secret (`[doc:CAPSULE-SPEC]` §9,
-//! owner's decision 25.10 "(а)"). Green 27.10.
+//! owner's decision 25.10 "(a)"). Green 27.10.
 
 use ksg_container_v2::Container;
 use ksg_core_v2::crypto::hash::Hash;

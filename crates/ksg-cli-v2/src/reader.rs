@@ -295,7 +295,7 @@ pub fn init(home: &Path, opts: &InitOptions) -> Result<Meta, String> {
     // Goal 1, criterion G1-4: a `bare` printing sets no post-quantum
     // layer — no key is generated, none is stored, the issuer vouches
     // for nothing. Pro and `light` keep the key, as before.
-    // Д-4 ([doc:CAPSULE-SPEC] §9): the seal and the post-quantum key are laid
+    // D-4 ([doc:CAPSULE-SPEC] §9): the seal and the post-quantum key are laid
     // at initiation (`Reader::initiate`), so the copies the sale chain keeps
     // from before it carry neither secret.
     let pq: Option<PublicKey> = None;
@@ -444,7 +444,7 @@ pub fn init(home: &Path, opts: &InitOptions) -> Result<Meta, String> {
 }
 
 /// Seals a printed container into a capsule — the reader's `init`
-/// (`Spec_kapsula` §3, §10 п. 3): the code part (the module's WASM bytes), the
+/// (`Spec_kapsula` §3, §10 item 3): the code part (the module's WASM bytes), the
 /// state sealed under the holder's layer key, and one map — before initiation
 /// the holder's key plays the map's role (§4).
 ///
@@ -471,7 +471,7 @@ pub fn home_to_capsule(home: &Path, code: &[u8]) -> Result<Vec<u8>, String> {
     }
     let map = OpenWith::from_bytes(key).seal_to();
     // Before initiation there is no client's key, so no `did:key` to name it
-    // with (Г-1); after it, the name is the one the birth gave.
+    // with (G-1); after it, the name is the one the birth gave.
     let client = meta
         .client
         .as_ref()
@@ -1011,7 +1011,7 @@ fn check_outer(
         }
         return ksg_container_v2::store::verify_absent_outer(bytes).map_err(e);
     }
-    // Д-4: before initiation a container holds no post-quantum key, so its
+    // D-4: before initiation a container holds no post-quantum key, so its
     // file carries no outer signature — exactly as `bare` (anything else is refused).
     if meta.client.is_none() && meta.pq.is_none() && meta.pq_cert.is_none() {
         return ksg_container_v2::store::verify_absent_outer(bytes).map_err(e);
@@ -3215,14 +3215,14 @@ impl Reader {
 
         // The three messages of the birth. The key has no name yet: it is
         // born by the first two, and only then can it be called by its own
-        // `did:key` (Г-1) — see below.
+        // `did:key` (G-1) — see below.
         let (keygen, hello) = MobileKeygen::start(uri(kid::UNBORN), &mut OsRng).map_err(e)?;
         let reply = self
             .c
             .begin_birth(uri(kid::UNBORN), &hello, &mut OsRng)
             .map_err(e)?;
         let (mut mobile, mut public, fin) = keygen.finish(&reply).map_err(e)?;
-        // Г-1: the client agent's identifier is the `did:key` of the group key
+        // G-1: the client agent's identifier is the `did:key` of the group key
         // its two halves sign under — unique without a registry, and the name
         // a verifier computes from the same key. Nothing is signed yet, so the
         // birth's documents and every page after them carry the computed name.
@@ -3280,7 +3280,7 @@ impl Reader {
                 }
             }
         };
-        // Д-4: the seal and the post-quantum key are born now, not at printing.
+        // D-4: the seal and the post-quantum key are born now, not at printing.
         // The issuer's word on them is on the template, as before (on the stand
         // the issuer's key is at hand; in the product it is the initiation page).
         let template = self.c.template_id();

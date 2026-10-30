@@ -84,7 +84,7 @@ fn a_pro_file_relabelled_bare_does_not_open() {
     let d = Dir::new("pro-as-bare");
     let home = d.p("home");
     ok(&["--home", s(&home), "init", "--class", "heavy"]);
-    // Д-4: the post-quantum key — and with it the outer signature — is born at
+    // D-4: the post-quantum key — and with it the outer signature — is born at
     // initiation, so the downgrade is tried on an initiated container.
     ok(&["--home", s(&home), "packet"]);
     ok(&["--home", s(&home), "buyer-key"]);
@@ -135,7 +135,7 @@ fn life(d: &Dir, class: &str) -> (PathBuf, PathBuf) {
     ok(&["--home", h, "packet"]);
     ok(&["--home", h, "buyer-key"]);
     ok(&["--home", h, "--mobile", m, "initiate"]);
-    // Д-4: the outer signature is born with the post-quantum key at initiation;
+    // D-4: the outer signature is born with the post-quantum key at initiation;
     // from then on the size is fixed, whatever the work.
     let size = std::fs::metadata(home.join("container.ksg")).unwrap().len();
     ok(&["--home", h, "--mobile", m, "open-journal"]);
@@ -567,7 +567,7 @@ fn the_file_checks_from_outside_against_the_issuers_word() {
         |h: &Path| FileClaim::from_meta(&std::fs::read(h.join("container.json")).unwrap()).unwrap();
     let file = |h: &Path| std::fs::read(h.join("container.ksg")).unwrap();
 
-    // Д-4: before initiation there is no post-quantum key, so nothing is
+    // D-4: before initiation there is no post-quantum key, so nothing is
     // signed outside and the metadata names no key to check against.
     assert!(
         verify_file(&file(&a), &claim(&a), &keys).is_err(),

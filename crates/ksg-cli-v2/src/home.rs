@@ -234,7 +234,7 @@ pub mod kid {
     pub const BUYER: &str = "did:key:zKsgBuyer#k1";
     /// The issuer's seal.
     pub const SEAL: &str = "did:key:zKsgSeal#k1";
-    /// The name a client's key carries until it is born (Г-1).
+    /// The name a client's key carries until it is born (G-1).
     ///
     /// A birth names its key by the `did:key` of the group key, and that key
     /// exists only when the birth is done — before it there is nothing to
