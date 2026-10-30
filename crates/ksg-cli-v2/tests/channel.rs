@@ -276,7 +276,7 @@ fn issuer_distributor_agent_enterprise_container_verified_alone() {
             container: id(&home),
             class: r.class,
             keys: client_keys(&d),
-            // Г-1: the reader names the client by the `did:key` of its key.
+            // G-1: the reader names the client by the `did:key` of its key.
             client_id_from_key: true,
             anchors: &NoReader,
         },
@@ -1958,7 +1958,7 @@ fn a_seat_checks_its_signature_and_the_containers_issuer() {
         .contains("not of this container's issuer"));
 }
 
-/// Г-1: one receiver of a packet, the whole way — printed on a serial of the
+/// G-1: one receiver of a packet, the whole way — printed on a serial of the
 /// sale, the client's key born at initiation, the journal opened, the export
 /// out, and the client's keys as a verifier reads them.
 fn receiver_life(d: &Dir) -> (String, KeySet) {
@@ -2027,7 +2027,7 @@ fn the_key(keys: &KeySet) -> &ksg_core_v2::crypto::sign::PublicKey {
     keys.keys().next().expect("one key")
 }
 
-/// Г-1: two receivers of `bare` do not share an identifier. The client's key
+/// G-1: two receivers of `bare` do not share an identifier. The client's key
 /// is born at initiation, so what names the agent is not a constant of the
 /// program but the key itself.
 #[test]
@@ -2038,11 +2038,11 @@ fn two_receivers_get_different_client_ids() {
     let (a, b) = (the_key(&one), the_key(&two));
     assert_ne!(a.kid.as_str(), b.kid.as_str(), "two clients, two names");
     assert_ne!(a.key, b.key, "two clients, two keys");
-    // Not the stand-in the program used before Г-1 either.
+    // Not the stand-in the program used before G-1 either.
     assert!(!a.kid.as_str().contains("zKsgClient"), "{}", a.kid);
 }
 
-/// Г-1: the client agent's identifier is the `did:key` of the group key its
+/// G-1: the client agent's identifier is the `did:key` of the group key its
 /// halves sign under — computed by the same code a verifier runs, so the
 /// pages and the export carry it without anyone's word.
 #[test]
@@ -2077,7 +2077,7 @@ fn the_client_id_is_the_did_key_of_its_group_key() {
     assert_eq!(r.first_agent.as_deref(), Some(did.as_str()));
 }
 
-/// Г-1: an author's identifier substituted in the export — the keys left as
+/// G-1: an author's identifier substituted in the export — the keys left as
 /// they were — is refused: the name is the key, and another name is another
 /// agent's.
 #[test]
@@ -2111,6 +2111,6 @@ fn a_substituted_author_id_in_the_export_is_refused() {
     let r = verify_bytes(&serde_json::to_vec(&forged).unwrap(), &expected(keys));
     assert!(!r.accepted, "{r:?}");
     let reason = r.reason.unwrap_or_default();
-    assert!(reason.contains("Г-1"), "{reason}");
+    assert!(reason.contains("G-1"), "{reason}");
     assert!(reason.contains(&theirs), "{reason}");
 }

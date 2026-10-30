@@ -175,7 +175,7 @@ pub struct Expected<'a> {
     /// status section.
     pub keys: KeySet,
     /// Whether the agent's identifier must be the `did:key` of its own key
-    /// (Г-1): a key set whose names are stand-ins (`did:key:zAgent`) is then
+    /// (G-1): a key set whose names are stand-ins (`did:key:zAgent`) is then
     /// refused, and a name borrowed from another key with it.
     ///
     /// `false` for the older test vectors and stands, where a `kid` is a name
@@ -341,7 +341,7 @@ fn bound(x: &BoundExport, exp: &Expected<'_>, profile: &Profile) -> Report {
     }
 }
 
-/// Г-1: the agent that signs the pages is named by the `did:key` of the key it
+/// G-1: the agent that signs the pages is named by the `did:key` of the key it
 /// signs under — the group key of its two halves, computed from the key
 /// itself, so that no registry and no trusted party is needed to tell one
 /// client agent from another.
@@ -366,14 +366,14 @@ fn named_by_its_key(party: &Party, exp: &Expected<'_>) -> Result<(), String> {
             let did = ksg_core_v2::crypto::did_key::of_public(k)
                 .map_err(|e| format!("the agent's key has no did:key: {e}"))?;
             return Err(format!(
-                "the pages are authored by {}, but the key it signs under is {did} (Г-1)",
+                "the pages are authored by {}, but the key it signs under is {did} (G-1)",
                 party.id.as_str()
             ));
         }
     }
     if ed25519 == 0 {
         return Err(format!(
-            "{}: no Ed25519 key to name the agent by (Г-1)",
+            "{}: no Ed25519 key to name the agent by (G-1)",
             party.id.as_str()
         ));
     }

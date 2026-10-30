@@ -50,7 +50,7 @@ fn anchor(subject: Hash, proved: &str) -> Attestation {
 
 /// The agent: Ed25519 and ML-DSA-65 from public seeds.
 ///
-/// Г-1: the agent is named by the `did:key` of its Ed25519 key — the same
+/// G-1: the agent is named by the `did:key` of its Ed25519 key — the same
 /// string a verifier computes — and not by a label the stand made up.
 struct Agent {
     ed: Ed25519Signer,
@@ -175,7 +175,7 @@ fn expected(class: Class, keys: KeySet, anchors: &dyn AttestationVerifier) -> Ex
         container: container(),
         class,
         keys,
-        // Г-1, the product's rule: the agent is named by the `did:key` of its
+        // G-1, the product's rule: the agent is named by the `did:key` of its
         // own key (the stand's keys are made that way).
         client_id_from_key: true,
         anchors,
@@ -241,7 +241,7 @@ fn keys_the_verifier_does_not_accept_are_refused() {
     assert!(r.reason.unwrap().contains("does not accept"));
 }
 
-/// Г-1: the export names its author, and the name must be the `did:key` of
+/// G-1: the export names its author, and the name must be the `did:key` of
 /// the key the pages are signed with. Another name — the keys left as they
 /// were — is another agent's name, and the export is refused.
 #[test]
@@ -257,7 +257,7 @@ fn an_author_named_by_another_key_is_refused() {
     );
     assert!(!r.accepted, "{r:?}");
     let reason = r.reason.unwrap_or_default();
-    assert!(reason.contains("Г-1"), "{reason}");
+    assert!(reason.contains("G-1"), "{reason}");
     assert!(reason.contains(&theirs), "{reason}");
 }
 
