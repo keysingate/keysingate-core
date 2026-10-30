@@ -158,6 +158,50 @@ STEP
   esac
 }
 
+# 1.6a: the agent's `STEP n OK page=p` is a claim; the journal is the fact.
+# journal_pages: how many pages the run's container holds now (0: no container
+# yet). Read with the panel itself, not through the agent.
+journal_pages() {
+  local name out
+  [ -s "$WORK/.current" ] || { echo 0; return; }
+  name=$(cat "$WORK/.current")
+  [ -f "$WORK/$name/h/container.json" ] || { echo 0; return; }
+  out=$("$KSG_PANEL" --home "$WORK/$name/h" status 2>/dev/null || true)
+  echo "$out" | awk '$1 == "pages" && NF == 2 { print $2; found = 1 } END { if (!found) print 0 }'
+}
+# step_written <step> <page> <pages before the step>: the page steps (1-5) must
+# have added a page to the journal during this step, and the claimed page must
+# be one of them; step 6 must have left an export file for every recorded page.
+# Prints the reason and fails when the claim does not hold.
+step_written() {
+  local step=$1 page=$2 before=$3 after
+  case "$step" in
+    1|2|3|4|5)
+      after=$(journal_pages)
+      if [ -z "$page" ]; then
+        echo "no page=<n> in the STEP line"; return 1
+      fi
+      if [ "$after" -le "$before" ]; then
+        echo "the journal did not grow (pages $before -> $after): no tool call wrote a page"; return 1
+      fi
+      if [ "$page" -lt "$before" ] || [ "$page" -ge "$after" ]; then
+        echo "page=$page is not one written in this step (new pages $before..$((after - 1)))"; return 1
+      fi
+      ;;
+    6)
+      local name missing=""
+      name=$(cat "$WORK/.current" 2>/dev/null || true)
+      for p in $(python3 -c 'import json,sys; print(" ".join(str(v) for v in sorted(set(json.load(open(sys.argv[1])).values()))))' "$STEPS_JSON"); do
+        [ -s "$WORK/$name/page-$p.json" ] || missing="$missing $p"
+      done
+      if [ -n "$missing" ]; then
+        echo "no export file for page(s):$missing"; return 1
+      fi
+      ;;
+  esac
+  return 0
+}
+
 # Step 10b-pre (J13): capsule noise before the agent works, for judge_page (2).
 # The claim scenario has no capsule step of its own, so the pair is assembled
 # by a print step exactly like scripts/demo_pro_capsule.sh (offline, no
@@ -215,6 +259,13 @@ while [ "$STEP" -le "$LAST_STEP" ]; do
     LAST_PAGE=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(max(d.values()) if d else 0)' "$STEPS_JSON")
     echo "Pages to export and verify: 1 through $LAST_PAGE." >>"$PROMPT_FILE"
   fi
+  # Every page step must show in the journal (1.6a): said so to the agent too.
+  cat >>"$PROMPT_FILE" <<'NOTE'
+The page number must be the one a ksg tool returned in THIS step. The
+orchestrator reads the container's journal after your reply: a STEP line
+without the tool call behind it is a failed step.
+NOTE
+  BEFORE_PAGES=$(journal_pages)
   ATTEMPT=0
   while :; do
     ATTEMPT=$((ATTEMPT + 1))
@@ -251,10 +302,25 @@ PY
     # it), so it is searched anywhere — no ^ anchor — and the OK/FAIL verdict
     # plus page=<n> are read from that line, not from the whole answer.
     STEP_LINE=$(grep -oE "STEP $STEP (OK|FAIL)[^[:cntrl:]]*" "$STEP_ANSWER" | tail -1 || true)
+    WHY=""
     if [ "$GW_RC" -eq 0 ] && [ -n "$STEP_LINE" ] && echo "$STEP_LINE" | grep -qE "STEP $STEP OK"; then
+      PAGE=$(echo "$STEP_LINE" | grep -oE "page=[0-9]+" | head -1 | cut -d= -f2 || true)
+      WHY=$(step_written "$STEP" "${PAGE:-}" "$BEFORE_PAGES") || {
+        echo "step $STEP attempt $ATTEMPT: the agent said OK but $WHY" >&2
+        if [ "$ATTEMPT" -ge 2 ]; then
+          echo "step $STEP: claimed twice without the journal behind it: stop" >&2
+          echo "the agent's answer: $STEP_ANSWER" >&2
+          rm -f "$PROMPT_FILE"
+          exit 1
+        fi
+        {
+          echo
+          echo "Your previous reply said STEP $STEP OK, but $WHY. Call the ksg tools now as listed above; reply with the page number they return."
+        } >>"$PROMPT_FILE"
+        continue
+      }
       echo "step $STEP OK (attempt $ATTEMPT): $STEP_LINE"
       # N7: record step→page (step 7 has no page — its line is bare `STEP 7 OK`).
-      PAGE=$(echo "$STEP_LINE" | grep -oE "page=[0-9]+" | head -1 | cut -d= -f2 || true)
       python3 - "$STEPS_JSON" "$STEP" "${PAGE:-}" <<'PY'
 import json, sys
 path, step, page = sys.argv[1], sys.argv[2], sys.argv[3]
