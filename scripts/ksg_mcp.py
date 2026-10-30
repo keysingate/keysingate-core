@@ -152,7 +152,18 @@ def ksg_get_container() -> dict:
     Rules (always on): never print keys or secrets; never touch another container;
     never edit container files by hand - only through these tools;
     a refused call means stop and report;
-    before the first work with a container read the skill docs/skills/ksg-container/SKILL.md."""
+    before the first work with a container read the skill docs/skills/ksg-container/SKILL.md.
+
+    Idempotent within a run: once a container is made, every later call returns
+    that same container (its name is kept in KSG_WORK/.current) — no new
+    payment, no new print. A fresh run removes KSG_WORK/.current first."""
+    current = WORK / ".current"
+    if current.is_file():
+        name = current.read_text().strip()
+        meta = WORK / name / "h" / "container.json"
+        if name.startswith("c-") and meta.is_file():
+            cid = json.loads(meta.read_text())["id"]
+            return {"name": name, "container": cid, "class": CLASS, "payment": "reused"}
     required = run([TILL, "required", ISSUER, PRICE, RESOURCE])
     header = run([SMOKE], stdin=required)
     accepted = run([TILL, "accept", ISSUER, PRICE, RESOURCE], stdin=header).strip()
@@ -168,6 +179,7 @@ def ksg_get_container() -> dict:
     panel(d, "initiate")
     panel(d, "open-journal")
     cid = json.loads((d / "h" / "container.json").read_text())["id"]
+    current.write_text(name)
     return {"name": name, "container": cid, "class": CLASS, "payment": accepted}
 
 

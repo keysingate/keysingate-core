@@ -164,6 +164,9 @@ mkdir -p "$ANSWERS_DIR"
 # judge_page.py --steps reads it in N8. Written fresh on every run.
 STEPS_JSON="$WORK/steps.json"
 echo '{}' >"$STEPS_JSON"
+# The run's container: ksg_get_container makes it once and returns it to every
+# later step (KSG_WORK/.current). A fresh run starts without one.
+rm -f "$WORK/.current"
 # One agent session for the whole checklist: step 1 opens it, every later step
 # continues it (A2A contextId), so the agent keeps the claim in its context.
 CTX_FILE="$WORK/context_id"
@@ -262,7 +265,11 @@ ANSWER="$STEP7_ANSWER"
 # This script only cuts the `EXPLANATION:` block out of the agent's answer and lets
 # judge_explain.py check that every [p:N] points at a page that exists and was
 # ACCEPTED offline — no model is called here.
-BOX=$(ls -dt "$WORK"/c-* 2>/dev/null | head -1 || true)
+if [ -s "$WORK/.current" ]; then
+  BOX="$WORK/$(cat "$WORK/.current")"
+else
+  BOX=$(ls -dt "$WORK"/c-* 2>/dev/null | head -1 || true)
+fi
 if [ -z "${BOX:-}" ]; then
   echo "no container under $WORK: the agent wrote no pages" >&2
   exit 1

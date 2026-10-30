@@ -393,3 +393,35 @@ class CanonicalTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GetContainerOncePerRun(unittest.TestCase):
+    """`ksg_get_container` makes the run's container once and hands the same one
+    to every later step (KSG_WORK/.current) — no second payment or print."""
+
+    def test_second_call_reuses_the_container(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            calls = []
+
+            def fake_run(args, stdin=None):
+                calls.append(args)
+                if "init" in args:
+                    home = Path(args[args.index("--home") + 1])
+                    home.mkdir(parents=True)
+                    (home / "container.json").write_text(json.dumps({"id": "did:test:1"}))
+                return "ok"
+
+            saved = (ksg_mcp.WORK, ksg_mcp.run, ksg_mcp.panel)
+            ksg_mcp.WORK, ksg_mcp.run = work, fake_run
+            ksg_mcp.panel = lambda d, cmd, mobile=True: None
+            try:
+                first = ksg_mcp.ksg_get_container()
+                n = len(calls)
+                second = ksg_mcp.ksg_get_container()
+            finally:
+                ksg_mcp.WORK, ksg_mcp.run, ksg_mcp.panel = saved
+            self.assertEqual(first["name"], second["name"])
+            self.assertEqual(second["payment"], "reused")
+            self.assertEqual(len(calls), n, "the second call paid or printed again")
+            self.assertEqual((work / ".current").read_text(), first["name"])
