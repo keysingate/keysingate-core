@@ -61,7 +61,7 @@
 //! an operator needs.
 
 use std::collections::{BTreeMap, HashMap};
-use std::io::Write as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -1265,6 +1265,8 @@ pub const BARE_WORKER_DOMAIN_ENV: &str = "KSG_BARE_WORKER_DOMAIN";
 /// The worker sends `Authorization: Bearer <secret>`; the secret lives in a
 /// file named by this variable, never in code. Compared in constant time.
 pub const BARE_WORKER_SECRET_FILE_ENV: &str = "KSG_BARE_WORKER_SECRET_FILE";
+/// The largest `did.json` read: 64 KiB — a key document is a few hundred bytes.
+pub const DID_JSON_MAX: usize = 64 * 1024;
 /// The `HTTP(S)` timeout for fetching the domain's `did.json`, seconds.
 pub const BARE_DID_TIMEOUT_S: u64 = 10;
 
@@ -1380,7 +1382,7 @@ fn did_json_url(did_web: &str) -> Option<String> {
     }
     let mut parts = rest.split(':');
     let host = parts.next()?;
-    if host.is_empty() || host.len() > 253 {
+    if !public_host_name(host) {
         return None;
     }
     let mut url = String::from("https://");
@@ -1404,6 +1406,87 @@ fn did_json_url(did_web: &str) -> Option<String> {
     Some(url)
 }
 
+/// A host the service may fetch from: a DNS name of letters, digits, `-`
+/// and dots, with at least one dot and a letter in its last label — no port
+/// (`%3A`), no IP literal, no `localhost`. Where it resolves is checked
+/// separately, at connect time ([`public_addrs`]).
+fn public_host_name(host: &str) -> bool {
+    if host.is_empty() || host.len() > 253 {
+        return false;
+    }
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() < 2 {
+        return false;
+    }
+    let ok = labels.iter().all(|l| {
+        !l.is_empty()
+            && l.len() <= 63
+            && !l.starts_with('-')
+            && !l.ends_with('-')
+            && l.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    });
+    let tld_ok = labels
+        .last()
+        .is_some_and(|t| t.bytes().any(|b| b.is_ascii_alphabetic()));
+    let lower = host.to_ascii_lowercase();
+    ok && tld_ok
+        && !lower.ends_with(".localhost")
+        && !lower.ends_with(".local")
+        && !lower.ends_with(".internal")
+}
+
+/// An address reachable on the public internet: not loopback, private,
+/// link-local, shared (CGNAT), multicast, documentation or reserved.
+fn public_ip(ip: std::net::IpAddr) -> bool {
+    use std::net::IpAddr;
+    match ip {
+        IpAddr::V4(v4) => {
+            let [a, b, ..] = v4.octets();
+            !(v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || v4.is_multicast()
+                || v4.is_documentation()
+                || a == 0
+                || (a == 100 && (64..128).contains(&b))
+                || (a == 198 && (b == 18 || b == 19))
+                || a >= 240
+                || (a == 192 && b == 0))
+        }
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return public_ip(IpAddr::V4(v4));
+            }
+            let seg0 = v6.segments()[0];
+            !(v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || (seg0 & 0xfe00) == 0xfc00
+                || (seg0 & 0xffc0) == 0xfe80
+                || seg0 == 0x2001 && v6.segments()[1] == 0x0db8
+                || seg0 == 0x0064 && v6.segments()[1] == 0xff9b
+                || seg0 == 0)
+        }
+    }
+}
+
+/// Resolves `netloc` and keeps the public addresses only; none left is an
+/// error. Used as the fetch's resolver, so the check holds for the address
+/// actually connected to (no DNS rebinding between check and connect).
+fn public_addrs(netloc: &str) -> std::io::Result<Vec<std::net::SocketAddr>> {
+    use std::net::ToSocketAddrs as _;
+    let addrs: Vec<_> = netloc.to_socket_addrs()?.filter(|a| public_ip(a.ip())).collect();
+    if addrs.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "no public address",
+        ));
+    }
+    Ok(addrs)
+}
+
 /// The domain's verification key from its `did.json` (этап 9).
 ///
 /// Fetches the document over HTTPS (`did_json_url`) with a bounded timeout,
@@ -1418,23 +1501,30 @@ fn did_json_url(did_web: &str) -> Option<String> {
 /// it reads but names no usable Ed25519 key.
 fn orch_key(did_web: &str) -> Result<VerifyingKey, Reply> {
     let url = did_json_url(did_web).ok_or_else(|| err(400, "did_web: malformed contact"))?;
+    // Public addresses only, no redirects, HTTPS only, body capped while
+    // reading: the fetch cannot be pointed into the service's own network.
     let agent: ureq::Agent = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(BARE_DID_TIMEOUT_S))
+        .redirects(0)
+        .https_only(true)
+        .resolver(public_addrs)
         .build();
-    let body = agent
+    let resp = agent
         .get(&url)
         .call()
-        .map_err(|_| err(503, "did.json: not reachable"))
-        .and_then(|resp| {
-            if resp.status() != 200 {
-                return Err(err(503, "did.json: not reachable"));
-            }
-            resp.into_string()
-                .map_err(|_| err(503, "did.json: not reachable"))
-        })?;
-    if body.len() > MAX_BODY {
+        .map_err(|_| err(503, "did.json: not reachable"))?;
+    if resp.status() != 200 {
+        return Err(err(503, "did.json: not reachable"));
+    }
+    let mut raw = Vec::new();
+    resp.into_reader()
+        .take(DID_JSON_MAX as u64 + 1)
+        .read_to_end(&mut raw)
+        .map_err(|_| err(503, "did.json: not reachable"))?;
+    if raw.len() > DID_JSON_MAX {
         return Err(err(503, "did.json: too large"));
     }
+    let body = String::from_utf8(raw).map_err(|_| err(500, "did.json: no Ed25519 key"))?;
     did_key(&body).ok_or_else(|| err(500, "did.json: no Ed25519 key"))
 }
 
@@ -1953,6 +2043,48 @@ pub fn start(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[test]
+    fn did_web_hosts_are_public_names_only() {
+        for bad in [
+            "did:web:localhost",
+            "did:web:localhost%3A8443",
+            "did:web:example.com%3A8443",
+            "did:web:127.0.0.1",
+            "did:web:10.0.0.1",
+            "did:web:%5B%3A%3A1%5D",
+            "did:web:svc.internal",
+            "did:web:a.localhost",
+            "did:web:-x.example.com",
+        ] {
+            assert_eq!(did_json_url(bad), None, "{bad}");
+        }
+        assert_eq!(
+            did_json_url("did:web:example.com").as_deref(),
+            Some("https://example.com/.well-known/did.json")
+        );
+        assert_eq!(
+            did_json_url("did:web:example.com:user:alice").as_deref(),
+            Some("https://example.com/user/alice/did.json")
+        );
+    }
+
+    #[test]
+    fn only_public_addresses_pass() {
+        for bad in [
+            "127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254",
+            "100.64.0.1", "0.0.0.0", "255.255.255.255", "224.0.0.1", "198.18.0.1",
+            "192.0.0.8", "240.0.0.1", "::1", "::", "fc00::1", "fe80::1",
+            "::ffff:127.0.0.1", "::ffff:10.0.0.1", "64:ff9b::a00:1", "2001:db8::1",
+        ] {
+            assert!(!public_ip(bad.parse().unwrap()), "{bad}");
+        }
+        for good in ["1.1.1.1", "93.184.216.34", "2606:4700:4700::1111"] {
+            assert!(public_ip(good.parse().unwrap()), "{good}");
+        }
+        assert!(public_addrs("127.0.0.1:443").is_err());
+        assert!(public_addrs("[::1]:443").is_err());
+    }
 
     #[test]
     fn outbound_calls_take_at_most_half_the_threads() {
