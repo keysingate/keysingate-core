@@ -295,9 +295,14 @@ fn period_of(ms: u64) -> String {
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    // A thread that panicked mid-change leaves the state as the last write
-    // put it on disk; going on with what is in memory is no worse.
-    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    // A thread that panicked mid-change left the state in memory half
+    // applied; the next save would write that half to disk. The process
+    // stops instead, and the service manager starts it again from the files
+    // the last whole write left (examples/systemd: Restart=on-failure).
+    m.lock().unwrap_or_else(|_| {
+        eprintln!("ksg-service: a thread died holding the state; stopping to restart from disk");
+        std::process::exit(70)
+    })
 }
 
 /// Writes `bytes` to `path` whole or not at all.

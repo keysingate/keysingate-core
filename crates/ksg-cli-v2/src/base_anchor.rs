@@ -445,10 +445,16 @@ impl BaseLink {
         let tx = hex0x(&hash);
         let start = Instant::now();
         loop {
-            let r = self
-                .rpc
-                .call("eth_getTransactionReceipt", json!([tx]))
-                .map_err(net)?;
+            // One failed question is "not known yet", not a failure: the
+            // transaction is out already; the deadline decides.
+            let r = match self.rpc.call("eth_getTransactionReceipt", json!([tx])) {
+                Ok(r) => r,
+                Err(_) if start.elapsed() <= self.wait => {
+                    std::thread::sleep(Duration::from_millis(500));
+                    continue;
+                }
+                Err(e) => return Err(net(e)),
+            };
             if !r.is_null() {
                 if r.get("status").and_then(Value::as_str) == Some("0x1") {
                     return Ok(tx);
@@ -483,7 +489,7 @@ impl BaseLink {
                 )
                 .map_err(net)?
                 .as_str()
-                .unwrap_or_default(),
+                .ok_or_else(|| net("the EntryPoint's nonce: no answer".into()))?,
         )
         .map_err(|e| net(e.to_string()))?;
         let nonce: [u8; 32] = nonce_word
@@ -524,8 +530,12 @@ impl BaseLink {
             let r = sponsor
                 .call(method, json!([op.to_json(), ep, chain, {}]))
                 .map_err(net)?;
-            unhex(r["paymasterAndData"].as_str().unwrap_or_default())
-                .map_err(|e| net(format!("{method}: {e}")))
+            // An empty answer is the sponsor declining, not empty data.
+            let pd = r["paymasterAndData"]
+                .as_str()
+                .filter(|s| s.len() > 2)
+                .ok_or_else(|| net(format!("{method}: no paymasterAndData in the answer")))?;
+            unhex(pd).map_err(|e| net(format!("{method}: {e}")))
         };
         op.paymaster_and_data = pm("pm_getPaymasterStubData", &op)?;
         let gas = sponsor
@@ -542,13 +552,21 @@ impl BaseLink {
             .map_err(net)?;
         let start = Instant::now();
         loop {
-            let r = sponsor
-                .call("eth_getUserOperationReceipt", json!([hash]))
-                .map_err(net)?;
+            // One failed question is "not known yet", not a failure: the
+            // operation may be on its way; the deadline decides.
+            let r = match sponsor.call("eth_getUserOperationReceipt", json!([hash])) {
+                Ok(r) => r,
+                Err(_) if start.elapsed() <= self.wait => {
+                    std::thread::sleep(Duration::from_millis(500));
+                    continue;
+                }
+                Err(e) => return Err(net(e)),
+            };
             if !r.is_null() {
                 let tx = r["receipt"]["transactionHash"]
                     .as_str()
-                    .unwrap_or_default()
+                    .filter(|t| t.len() == 66)
+                    .ok_or_else(|| net(format!("{hash}: the confirmation names no transaction")))?
                     .to_owned();
                 if r["success"].as_bool() == Some(true) {
                     return Ok(tx);
@@ -621,11 +639,55 @@ impl BaseLink {
 
 /// The contract's refusal inside a node's error text, if there is one.
 fn refusal_in(msg: &str) -> Option<Refusal> {
-    let i = msg.find("0x")?;
-    let hexpart: String = msg[i..]
-        .chars()
-        .skip(2)
-        .take_while(char::is_ascii_hexdigit)
-        .collect();
-    decode_refusal(&unhex(&hexpart).ok()?)
+    // The node's error object, as `HttpRpc` passes it ("method: {json}"):
+    // its `data` field holds the revert data. Read that first; the text scan
+    // below is for nodes that put the data in the message only.
+    let data = msg
+        .find('{')
+        .and_then(|i| serde_json::from_str::<Value>(&msg[i..]).ok())
+        .and_then(|e| e.get("data").and_then(Value::as_str).map(str::to_owned));
+    if let Some(d) = data {
+        if let Some(r) = unhex(&d).ok().and_then(|b| decode_refusal(&b)) {
+            return Some(r);
+        }
+    }
+    // Every 0x… run in the text, not only the first: an address or a hash
+    // ahead of the data must not hide the refusal.
+    msg.match_indices("0x").find_map(|(i, _)| {
+        let hexpart: String = msg[i + 2..]
+            .chars()
+            .take_while(char::is_ascii_hexdigit)
+            .collect();
+        unhex(&hexpart).ok().and_then(|b| decode_refusal(&b))
+    })
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// StalePredecessor(head = 0x11…, presented = 0x22…), ABI-encoded.
+    fn stale() -> String {
+        let sel = &ksg_anchor_v2::evm::keccak(b"StalePredecessor(bytes32,bytes32)")[..4];
+        format!("0x{}{}{}", hex::encode(sel), "11".repeat(32), "22".repeat(32))
+    }
+
+    #[test]
+    fn a_refusal_is_read_from_the_error_data() {
+        // An address ahead of the data in the message: the old reader took it.
+        let msg = format!(
+            r#"eth_call: {{"code":3,"message":"execution reverted from 0x{}","data":"{}"}}"#,
+            "ab".repeat(20),
+            stale()
+        );
+        assert!(matches!(refusal_in(&msg), Some(Refusal::StalePredecessor { .. })), "{msg}");
+    }
+
+    #[test]
+    fn a_refusal_in_the_text_alone_is_still_read() {
+        let msg = format!("halt: tx 0x{} execution reverted: {}", "cd".repeat(32), stale());
+        assert!(matches!(refusal_in(&msg), Some(Refusal::StalePredecessor { .. })), "{msg}");
+        assert!(refusal_in("connection refused").is_none());
+    }
 }
