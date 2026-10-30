@@ -27,6 +27,9 @@
 # the pages the agent exported from there in step 9.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# 1.6a(b): per-step page verification (lib has no side effects on source).
+# shellcheck disable=SC1091
+. "$ROOT/scripts/lib/verify_step_page.sh"
 AGENT=${1:-hermes-cloud}
 CASE=${2:-$ROOT/demo/case_4417.md}
 WORK=${KSG_WORK:-$ROOT/ksg-work}
@@ -215,6 +218,15 @@ while [ "$STEP" -le "$LAST_STEP" ]; do
     LAST_PAGE=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(max(d.values()) if d else 0)' "$STEPS_JSON")
     echo "Pages to export and verify: 1 through $LAST_PAGE." >>"$PROMPT_FILE"
   fi
+  # 1.6a(a): hard rules appended to EVERY step prompt — the agent must call
+  # the ksg tools and may only report a page number a tool returned to it.
+  {
+    echo
+    echo "HARD RULES: call ksg_get_container first in every step; reply"
+    echo "\`STEP $STEP OK page=<p>\` ONLY with the page number a ksg tool call"
+    echo "returned in THIS step — a number you invent without calling the"
+    echo "tools is invalid and stops the run; one step per answer."
+  } >>"$PROMPT_FILE"
   ATTEMPT=0
   while :; do
     ATTEMPT=$((ATTEMPT + 1))
@@ -255,6 +267,15 @@ PY
       echo "step $STEP OK (attempt $ATTEMPT): $STEP_LINE"
       # N7: record step→page (step 7 has no page — its line is bare `STEP 7 OK`).
       PAGE=$(echo "$STEP_LINE" | grep -oE "page=[0-9]+" | head -1 | cut -d= -f2 || true)
+      # 1.6a(b): the claimed page must exist as a file in the run box.
+      # An invented number with no page-<n>.json behind it is unusable.
+      if [ "$STEP" -ne 7 ] && [ -n "$PAGE" ]; then
+        if ! VBOX=$(verify_step_page "$WORK" "$PAGE"); then
+          echo "step $STEP claims page=$PAGE, but no such file in the run box: unusable answer" >&2
+          STEP_LINE=""
+        fi
+      fi
+      if [ -n "$STEP_LINE" ]; then
       python3 - "$STEPS_JSON" "$STEP" "${PAGE:-}" <<'PY'
 import json, sys
 path, step, page = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -269,6 +290,7 @@ with open(path, "w") as f:
     json.dump(data, f, indent=1, sort_keys=True)
 PY
       break
+      fi
     fi
     if [ "$GW_RC" -eq 0 ] && [ -n "$STEP_LINE" ] && echo "$STEP_LINE" | grep -qE "STEP $STEP FAIL"; then
       echo "step $STEP refused by the agent: $STEP_LINE" >&2
