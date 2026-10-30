@@ -5,7 +5,7 @@
 # node's faucet, builds the capsule module (wasm), then drives the reader's
 # binary `ksg-capsule` (not the test): print (heavy, anchored) -> initiation
 # (the seals are anchored on the node) -> work pages (KSG_DEMO_PAGES, 1 by default) -> export of those pages
-# 1..3. Node, payer and capsule are thrown away.
+# 1..PAGES. Node, payer and capsule are thrown away.
 #
 # `ksg-capsule` has no `scan-key` command (it cannot hand out the holder's
 # scan key in the hex form `ksg-verify-v2 --scan-key` takes), and no code is
@@ -14,6 +14,10 @@
 # path (`crates/ksg-capsule-reader/tests/k5_offline.rs`, `k5_network_*`).
 #
 #   scripts/demo_pro_capsule_localnet.sh   (heavy, own node)
+#
+# KSG_DEMO_VERIFY_NET=1 (default) runs the verify half above after the demo
+# part (10 more anchors); 0 skips it, so the video can film the two parts
+# separately (and the mainnet probe pays for the demo part only).
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export PATH="$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$PATH"
@@ -37,9 +41,15 @@ export KSG_ANCHOR_WAIT_S=20
 
 (cd "$ROOT" && cargo build -q --release -p ksg-capsule-reader -p ksg-verify-v2) || exit 1
 (cd "$ROOT" && cargo build -q --release -p ksg-capsule-module --target wasm32-unknown-unknown) || exit 1
+# The verify half's test binary is built here, before any timer starts, so
+# "time verify half" is the anchoring, not the compiler.
+if [ "${KSG_DEMO_VERIFY_NET:-1}" = 1 ]; then
+  (cd "$ROOT" && cargo test -q -p ksg-capsule-reader --no-run) || exit 1
+fi
 C=$ROOT/target/release/ksg-capsule
 MOD=$ROOT/target/wasm32-unknown-unknown/release/ksg_capsule_module.wasm
 H=$W/h
+T_DEMO=$(date +%s)
 step() { "$@" >"$W/out" 2>&1 || { echo "FAIL: ${*:2}"; tail -5 "$W/out"; exit 1; }; }
 size() { stat -c%s "$H/capsule.bin"; }
 
@@ -72,12 +82,27 @@ for n in $(seq 1 "$PAGES"); do
 done
 step "$C" --home "$H" keys --out "$W/k.json"
 
+echo "time demo part: $(( $(date +%s) - T_DEMO )) s"
+T_VERIFY=$(date +%s)
+
 # Fallback path (no `scan-key` in `ksg-capsule`, no code added for the demo):
 # the network test prints its own heavy capsule on this node, works three
 # pages, checks each against the node (`ACCEPTED`), and flips one byte of a
 # seal signature (`REJECTED`). It reads the node, the payer and the module
 # from the environment this script prepared.
-(cd "$ROOT" && KSG_PAYER=$PAYER KSG_RPC="$RPC" KSG_CAPSULE_WASM=$MOD \
-  cargo test -p ksg-capsule-reader -- --ignored k5_network --nocapture) || exit 1
+if [ "${KSG_DEMO_VERIFY_NET:-1}" = 1 ]; then
+  (cd "$ROOT" && KSG_PAYER=$PAYER KSG_RPC="$RPC" KSG_CAPSULE_WASM=$MOD \
+    cargo test -p ksg-capsule-reader -- --ignored k5_network --nocapture) || exit 1
+else
+  echo "verify half skipped (KSG_DEMO_VERIFY_NET=${KSG_DEMO_VERIFY_NET})"
+fi
 
+echo "time verify half: $(( $(date +%s) - T_VERIFY )) s"
+# The payer's transactions on this node, read before the node goes away
+# (roadmap 2.3: anchors = 6 for the demo part + 10 for the verify half);
+# one of them is the airdrop.
+SIGS=$(curl -s "$RPC" -H 'Content-Type: application/json' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getSignaturesForAddress\",\"params\":[\"$(solana-keygen pubkey "$PAYER")\",{\"limit\":1000}]}" \
+  | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["result"]))' 2>/dev/null || echo "?")
+echo "payer transactions: $SIGS (one is the airdrop; the rest are anchor memos)"
 echo "DEMO PRO CAPSULE LOCALNET OK"
