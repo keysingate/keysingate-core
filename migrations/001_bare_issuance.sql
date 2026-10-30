@@ -1,49 +1,50 @@
--- 001_bare_issuance.sql — учёт выдачи контейнеров bare.
+-- 001_bare_issuance.sql — accounting of bare container issuance.
 --
--- Решение владельца 27.10: «номер N выдан хэшу X, больше ничего не фиксируется».
--- Поэтому в таблицах нет ни почты, ни имени, ни did, ни времени, ни статуса заявки.
+-- Owner decision 27.10: "number N issued to hash X, nothing else is recorded".
+-- Therefore the tables hold no email, no name, no did, no timestamp, no request status.
 --
--- Почему так:
---   * это книга выдачи, а не реестр людей: БД не должна позволять узнать, кому
---     выдан номер, — ни по запросу, ни при утечке, ни по решению суда;
---   * хэш необратим: holder_hmac = HMAC(секрет сервиса, email) для овнера,
---     domain_hmac = HMAC(секрет сервиса, did:web) для оркестратора; секрет живёт
---     в сервисе выдачи, не в БД, поэтому пересчитать хэш в БД невозможно;
---   * по хэшу сервис отвечает на единственный нужный вопрос — «этот держатель
---     уже получал бесплатный bare в этой выдаче?» — и ничего больше;
---   * нет времени и порядка — нет профилирования по датам и нет возможности
---     восстановить хронологию выдачи из этой таблицы;
---   * номер выдаётся один раз: (release_id, number) — первичный ключ, повторная
---     выдача того же номера в той же выдаче невозможна на уровне схемы.
+-- Why:
+--   * this is an issuance ledger, not a people registry: the DB must not allow
+--     finding out to whom a number was issued — neither by query, nor by leak,
+--     nor by court order;
+--   * hashes are irreversible: holder_hmac = HMAC(service secret, email) for the owner,
+--     domain_hmac = HMAC(service secret, did:web) for the orchestrator; the secret lives
+--     in the issuance service, not in the DB, so hashes cannot be recomputed inside the DB;
+--   * by hash the service answers the only needed question — "has this holder
+--     already received a free bare in this issuance?" — and nothing more;
+--   * no timestamps and no order — no date-based profiling and no way to
+--     reconstruct the issuance chronology from this table;
+--   * a number is issued once: (release_id, number) is the primary key, re-issuance
+--     of the same number within the same issuance is impossible at schema level.
 --
--- Лимиты:
---   * releases.size — сколько номеров в выдаче (релиз 0: 100 000);
---   * unique (release_id, holder_hmac) — один бесплатный bare на держателя
---     в рамках выдачи;
---   * частичный unique (release_id, domain_hmac) where domain_hmac is not null —
---     один бесплатный bare на домен оркестратора в рамках выдачи.
---   * номер в диапазоне 1..size проверяется сервисом выдачи (схема знает только
---     number >= 1 и size > 0); в БД размер выдачи не Enforcement-ится триггером,
---     чтобы книга оставалась простой.
+-- Limits:
+--   * releases.size — how many numbers are in the issuance (release 0: 100 000);
+--   * unique (release_id, holder_hmac) — one free bare per holder
+--     within an issuance;
+--   * partial unique (release_id, domain_hmac) where domain_hmac is not null —
+--     one free bare per orchestrator domain within an issuance.
+--   * the number within 1..size is checked by the issuance service (the schema only knows
+--     number >= 1 and size > 0); the issuance size is not enforced by a trigger in the DB,
+--     to keep the ledger simple.
 --
--- Доступ: RLS включён на обеих таблицах, политик нет — anon и authenticated не
--- видят ни строки. Публичной остаётся только страница «выдано N» через функцию
--- issued_count() (security definer, отдаёт лишь число).
+-- Access: RLS is enabled on both tables, no policies — anon and authenticated see
+-- not a single row. The only public thing left is the "issued N" page via the
+-- issued_count() function (security definer, returns only a count).
 
 begin;
 
--- releases: одна строка на выдачу (релиз). size — сколько номеров в ней.
+-- releases: one row per issuance (release). size — how many numbers it holds.
 create table releases (
     id   text primary key,
     size integer not null check (size > 0)
 );
 
 comment on table releases is
-    'Выдачи номеров bare: id выдачи и её размер (релиз 0 — 100 000 номеров).';
+    'Bare number issuances: issuance id and its size (release 0 — 100 000 numbers).';
 comment on column releases.size is
-    'Число номеров в выдаче; номера начинаются с 1.';
+    'Number of numbers in the issuance; numbers start at 1.';
 
--- issuances: одна строка на выданный номер. Ничего, кроме номера и двух хэшей.
+-- issuances: one row per issued number. Nothing but the number and two hashes.
 create table issuances (
     release_id  text not null references releases (id),
     number      integer not null,
@@ -55,25 +56,25 @@ create table issuances (
 );
 
 comment on table issuances is
-    'Книга выдачи: номер N выдан хэшу X. Почта, имя, did и время не хранятся.';
+    'Issuance ledger: number N issued to hash X. Email, name, did and time are not stored.';
 comment on column issuances.number is
-    'Номер контейнера в выдаче, от 1 до releases.size.';
+    'Container number within the issuance, from 1 to releases.size.';
 comment on column issuances.holder_hmac is
-    'HMAC(секрет сервиса, email) для овнера или HMAC(секрет сервиса, did:web) для оркестратора; необратим.';
+    'HMAC(service secret, email) for the owner or HMAC(service secret, did:web) for the orchestrator; irreversible.';
 comment on column issuances.domain_hmac is
-    'HMAC(секрет сервиса, did:web) домена оркестратора; null для овнера. Лимит на домен.';
+    'HMAC(service secret, did:web) of the orchestrator domain; null for the owner. Per-domain limit.';
 
--- Лимит на домен оркестратора: один бесплатный bare на домен в рамках выдачи.
+-- Orchestrator domain limit: one free bare per domain within an issuance.
 create unique index issuances_domain_once_per_release
     on issuances (release_id, domain_hmac)
     where domain_hmac is not null;
 
--- RLS без политик: anon/authenticated не читают и не пишут ничего.
+-- RLS with no policies: anon/authenticated can neither read nor write anything.
 alter table releases enable row level security;
 alter table issuances enable row level security;
 
--- issued_count(release_id) — число для открытой страницы «выдано N».
--- security definer: обходит RLS, но отдаёт только счётчик, ни одной строки.
+-- issued_count(release_id) — the count for the public "issued N" page.
+-- security definer: bypasses RLS but returns only the counter, not a single row.
 create function issued_count(p_release_id text)
     returns bigint
     language sql
@@ -85,12 +86,12 @@ as $$
 $$;
 
 comment on function issued_count(text) is
-    'Сколько номеров выдано в выдаче: для страницы «выдано N». Только число.';
+    'How many numbers are issued within the issuance: for the "issued N" page. Count only.';
 
 revoke all on function issued_count(text) from public;
 
--- Роли anon/authenticated есть на Supabase, но не в чистом Postgres:
--- в песочнице гранты просто пропускаются.
+-- The anon/authenticated roles exist on Supabase but not in plain Postgres:
+-- in the sandbox the grants are simply skipped.
 do $$
 begin
     if exists (select 1 from pg_roles where rolname = 'anon') then

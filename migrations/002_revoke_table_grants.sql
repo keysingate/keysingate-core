@@ -1,20 +1,20 @@
--- 002_revoke_table_grants.sql — второй замок поверх RLS.
+-- 002_revoke_table_grants.sql — second lock on top of RLS.
 --
--- Зачем:
---   * на Supabase роли anon и authenticated по умолчанию получают права на новые
---     таблицы в schema public через default privileges (alter default privileges
---     ... grant all on tables): таблица появляется с уже выданным ALL, и барьер
---     остаётся единственным — RLS без политик;
---   * одного барьера мало: ошибка в политике, отключение RLS или забытый
---     security definer открывают таблицу целиком. Поэтому права отзываются
---     явно, на уровне грантов, — вторым замком;
---   * отзываем all (select, insert, update, delete, truncate, references,
---     trigger): этим таблицам публичный доступ не нужен ни в каком виде;
---   * execute на issued_count(text) у anon/authenticated остаётся — через него
---     публично доступно только число выданных номеров, ни одной строки.
+-- Why:
+--   * on Supabase the anon and authenticated roles get rights on new
+--     tables in schema public by default via default privileges (alter default privileges
+--     ... grant all on tables): a table appears with ALL already granted, and the barrier
+--     remains the only one — RLS with no policies;
+--   * one barrier is not enough: a policy mistake, disabled RLS, or a forgotten
+--     security definer open the whole table. So rights are revoked
+--     explicitly, at grant level — as a second lock;
+--   * we revoke all (select, insert, update, delete, truncate, references,
+--     trigger): these tables need no public access of any kind;
+--   * execute on issued_count(text) stays for anon/authenticated — through it
+--     only the count of issued numbers is publicly available, not a single row.
 --
--- Роли anon/authenticated есть на Supabase, но не в чистом Postgres: в песочнице
--- гранты просто пропускаются (как в 001).
+-- The anon/authenticated roles exist on Supabase but not in plain Postgres: in the sandbox
+-- the grants are simply skipped (as in 001).
 
 begin;
 
@@ -30,6 +30,6 @@ end
 $$;
 
 comment on column issuances.domain_hmac is
-    'HMAC(секрет сервиса, домен оркестратора) — сам домен, без пути did:web; null для овнера. Лимит на домен.';
+    'HMAC(service secret, orchestrator domain) — the domain itself, without the did:web path; null for the owner. Per-domain limit.';
 
 commit;
