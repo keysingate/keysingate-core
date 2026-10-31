@@ -203,7 +203,8 @@ flowchart TB
 
 | Purpose | Primitive |
 |---|---|
-| Page and document signatures | Ed25519 (strict) + ML-DSA-65 (FIPS 204) |
+| Page, seal and issuer document signatures | Ed25519 (strict) |
+| The container file's outer signature (post-quantum) | ML-DSA-65 (FIPS 204) |
 | The client's signing key | FROST 2-of-2 (RFC 9591) — the whole key never exists; one half with the client, one in the container |
 | Key hand-over between holders | X25519 + ML-KEM-768 (FIPS 203), HKDF-SHA256, ChaCha20-Poly1305 |
 | Canonical form | JCS (RFC 8785), integers 0 … 2⁵³ − 1 |
@@ -230,6 +231,9 @@ flowchart TB
 | The container number paid with x402 through μ Gate — the agent never holds a wallet key | [`scripts/e2e_ksg_x402.sh`](scripts/e2e_ksg_x402.sh) |
 | Pro with anchors on a local Solana node | [`scripts/demo_pro_localnet.sh`](scripts/demo_pro_localnet.sh) |
 | The same chain on the capsule: print → initiation → three pages → export → ACCEPTED offline; a tampered page REJECTED | [`scripts/demo_pro_capsule.sh`](scripts/demo_pro_capsule.sh) |
+
+> [!IMPORTANT]
+> Each claim of the demo, and where to see it: [`demo/CLAIMS.md`](demo/CLAIMS.md). What the demo does not cover yet, and the known limits: [`docs/after-the-demo.md`](docs/after-the-demo.md).
 
 ### Built during the hackathon
 

@@ -13,3 +13,13 @@ The hackathon demo runs on the **test stand**: some keys that the product keeps 
 | 7 | Remote signer | Local only | A network channel for agents that live in short-lived environments and for orchestrators that keep their agents' signers |
 | 8 | Anchored (Pro) run time | ~400 s on a local Solana node with a 120 s anchor wait | Profile and shorten |
 | 9 | Code comments | Partly not in English | All comments and messages in English |
+| 10 | Light anchors in the written standard | The code anchors `light` minimally on Base Sepolia (birth, initiation, before a value leaves, every ten records); the published IETF draft `-00` still says `light` anchors only after it switches to Pro | Draft revision `-01` with the minimal schedule |
+
+## Known limits — stated, not hidden
+
+| Limit | What it means |
+|---|---|
+| One payer per container (Pro, Solana) | Anchor memos are blind — they reveal nothing of the content — but the payer's transaction history groups one container's anchors for anyone who knows the payer's address. A payer per container is the holder's choice |
+| A copy is seen at the next anchor, not instantly | Base (`light`): within the ten offline records two copies can each write; the second learns it is a copy when its next anchor is refused — before any export or transfer of rights. Solana (Pro): a rolled-back file is caught when a later copy anchored through the same payer |
+| `bare` may be copied | By design: a `bare` journal is never anchored and is meant to be copied; its identifier only labels whose it is |
+| Tests with real-time waits | A few end-to-end tests wait on the clock (a standing that must expire, an anchor that must land); their deadlines are generous, so a slow machine makes them slower, not red |
